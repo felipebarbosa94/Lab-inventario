@@ -30,6 +30,12 @@ export default function MovementModal({
       setError("Ingresá una cantidad válida");
       return;
     }
+    if (type === "salida" && qty > item.quantity) {
+      setError(
+        `Solo quedan ${item.quantity} ${UNIT_LABELS[item.unit]} — no podés quitar más de eso.`
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     const { error: insertError } = await supabase.from("movements").insert({
@@ -65,6 +71,7 @@ export default function MovementModal({
               type="number"
               inputMode="decimal"
               min="0"
+              max={type === "salida" ? item.quantity : undefined}
               step="any"
               autoFocus
               value={quantity}

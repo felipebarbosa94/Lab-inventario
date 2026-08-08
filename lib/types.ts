@@ -27,3 +27,28 @@ export interface Movement {
 export interface MovementWithItem extends Movement {
   items: Pick<Item, "name" | "unit" | "project" | "flavor"> | null;
 }
+
+export interface Recipe {
+  id: string;
+  name: string;
+  project: string | null;
+  batch_label: string;
+  steps: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeItem {
+  id: string;
+  recipe_id: string;
+  item_id: string;
+  quantity_per_batch: number;
+}
+
+export interface RecipeItemWithItem extends RecipeItem {
+  items: Pick<Item, "name" | "unit" | "quantity"> | null;
+}
+
+export interface RecipeWithItems extends Recipe {
+  recipe_items: RecipeItemWithItem[];
+}

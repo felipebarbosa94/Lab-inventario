@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/check-alerts",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/finance-digest",
+      "schedule": "0 15 1 * *"
+    }
+  ]
+}
