@@ -19,6 +19,7 @@ export default function ProduceModal({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
 
   const batchCount = Number(batches) || 0;
 
@@ -34,6 +35,16 @@ export default function ProduceModal({
   });
 
   const anyShortage = rows.some((r) => r.short);
+  const allChecked = rows.length > 0 && rows.every((r) => checked.has(r.id));
+
+  function toggleChecked(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function handleGenerateOrder() {
     if (batchCount <= 0) {
@@ -104,33 +115,61 @@ export default function ProduceModal({
             min="1"
             step="any"
             value={batches}
-            onChange={(e) => setBatches(e.target.value)}
+            onChange={(e) => {
+              setBatches(e.target.value);
+              setChecked(new Set());
+            }}
             className="w-full rounded-md border border-neutral-300 px-3 py-2 text-lg"
             autoFocus
           />
         </div>
 
         <div className="mb-4">
-          <p className="text-sm font-medium text-neutral-700 mb-2">Esto es lo que se va a usar:</p>
+          <p className="text-sm font-medium text-neutral-700 mb-1">
+            Ve tachando cada ingrediente conforme lo agregues:
+          </p>
+          {!anyShortage && (
+            <p className="text-xs text-neutral-400 mb-2">
+              {checked.size}/{rows.length} marcados
+            </p>
+          )}
           <div className="space-y-1.5">
-            {rows.map((r) => (
-              <div
-                key={r.id}
-                className={`flex justify-between items-center text-sm rounded-md px-3 py-2 ${
-                  r.short ? "bg-red-50 text-red-700" : "bg-neutral-50 text-neutral-700"
-                }`}
-              >
-                <span>{r.items?.name ?? "Ítem eliminado"}</span>
-                <span className="font-medium">
-                  {r.needed.toLocaleString("es-MX")} {r.items ? UNIT_LABELS[r.items.unit] : ""}
-                  {r.short && (
-                    <span className="ml-2 text-xs">
-                      (solo hay {r.available.toLocaleString("es-MX")})
+            {rows.map((r) => {
+              const isChecked = checked.has(r.id);
+              return (
+                <label
+                  key={r.id}
+                  className={`flex justify-between items-center text-sm rounded-md px-3 py-3 cursor-pointer select-none ${
+                    r.short
+                      ? "bg-red-50 text-red-700"
+                      : isChecked
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "bg-neutral-50 text-neutral-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={r.short}
+                      onChange={() => toggleChecked(r.id)}
+                      className="w-5 h-5 shrink-0"
+                    />
+                    <span className={isChecked ? "line-through decoration-emerald-400" : ""}>
+                      {r.items?.name ?? "Ítem eliminado"}
                     </span>
-                  )}
-                </span>
-              </div>
-            ))}
+                  </span>
+                  <span className="font-medium shrink-0 ml-2">
+                    {r.needed.toLocaleString("es-MX")} {r.items ? UNIT_LABELS[r.items.unit] : ""}
+                    {r.short && (
+                      <span className="ml-2 text-xs">
+                        (solo hay {r.available.toLocaleString("es-MX")})
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
 
@@ -157,6 +196,11 @@ export default function ProduceModal({
         </div>
 
         {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+        {!anyShortage && !allChecked && rows.length > 0 && (
+          <p className="text-xs text-amber-600 mb-2">
+            Marca todos los ingredientes antes de confirmar.
+          </p>
+        )}
         <button
           onClick={handleGenerateOrder}
           disabled={batchCount <= 0}
@@ -173,7 +217,7 @@ export default function ProduceModal({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={saving || anyShortage || batchCount <= 0}
+            disabled={saving || anyShortage || batchCount <= 0 || !allChecked}
             className="flex-1 rounded-md py-2 text-white font-medium bg-red-600 disabled:opacity-40"
           >
             {saving ? "Descontando..." : "Confirmar y descontar todo"}

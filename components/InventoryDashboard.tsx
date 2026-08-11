@@ -18,11 +18,13 @@ import MonthlySummaryPanel from "./MonthlySummaryPanel";
 import FinancePanel from "./FinancePanel";
 import WorkerNameGate from "./WorkerNameGate";
 import { useWorkerName } from "@/lib/useWorkerName";
+import { useSimpleMode } from "@/lib/useSimpleMode";
 import { exportItemsToCsv } from "@/lib/exportCsv";
 import { exportFullBackup } from "@/lib/backup";
 
 export default function InventoryDashboard() {
   const { name, saveName, clearName } = useWorkerName();
+  const { simpleMode, setSimpleMode } = useSimpleMode();
   const [items, setItems] = useState<Item[]>([]);
   const [movements, setMovements] = useState<MovementWithItem[]>([]);
   const [loading, setLoading] = useState(supabaseConfigured);
@@ -38,6 +40,7 @@ export default function InventoryDashboard() {
   const [backingUp, setBackingUp] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showFinance, setShowFinance] = useState(false);
+  const [mostUsedIds, setMostUsedIds] = useState<string[]>([]);
 
   async function handleBackup() {
     setBackingUp(true);
@@ -97,6 +100,28 @@ export default function InventoryDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    supabase
+      .from("movements")
+      .select("item_id")
+      .gte("created_at", since.toISOString())
+      .then(({ data }) => {
+        const counts: Record<string, number> = {};
+        for (const m of data ?? []) {
+          counts[m.item_id] = (counts[m.item_id] ?? 0) + 1;
+        }
+        const sorted = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([id]) => id);
+        setMostUsedIds(sorted);
+      });
+  }, []);
+
   if (!supabaseConfigured) {
     return (
       <div className="max-w-lg mx-auto mt-16 p-6 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
@@ -137,55 +162,73 @@ export default function InventoryDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setShowFinance(true)}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
-          >
-            Finanzas
-          </button>
-          <button
-            onClick={() => setShowMonthly(true)}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
-          >
-            Resumen mensual
-          </button>
-          <button
-            onClick={() => setShowInsights(true)}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
-          >
-            Sugerencias
-          </button>
+          {!simpleMode && (
+            <>
+              <button
+                onClick={() => setShowFinance(true)}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                Finanzas
+              </button>
+              <button
+                onClick={() => setShowMonthly(true)}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                Resumen mensual
+              </button>
+              <button
+                onClick={() => setShowInsights(true)}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                Sugerencias
+              </button>
+            </>
+          )}
           <button
             onClick={() => setShowRecipes(true)}
             className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
           >
             Recetas
           </button>
+          {!simpleMode && (
+            <>
+              <button
+                onClick={() => exportItemsToCsv(sectionItems)}
+                disabled={sectionItems.length === 0}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium disabled:opacity-40"
+              >
+                Exportar CSV{projectFilter ? ` (${projectFilter})` : ""}
+              </button>
+              <button
+                onClick={handleBackup}
+                disabled={backingUp}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium disabled:opacity-40"
+              >
+                {backingUp ? "Generando..." : "Respaldo completo"}
+              </button>
+              <button
+                onClick={() => setShowNewItem(true)}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                + Nuevo ítem
+              </button>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="rounded-md bg-neutral-900 text-white px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                + Nuevo proyecto
+              </button>
+            </>
+          )}
           <button
-            onClick={() => exportItemsToCsv(sectionItems)}
-            disabled={sectionItems.length === 0}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium disabled:opacity-40"
+            onClick={() => setSimpleMode(!simpleMode)}
+            className={`rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium border ${
+              simpleMode
+                ? "bg-amber-50 text-amber-700 border-amber-300"
+                : "border-neutral-300 text-neutral-700"
+            }`}
           >
-            Exportar CSV{projectFilter ? ` (${projectFilter})` : ""}
-          </button>
-          <button
-            onClick={handleBackup}
-            disabled={backingUp}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium disabled:opacity-40"
-          >
-            {backingUp ? "Generando..." : "Respaldo completo"}
-          </button>
-          <button
-            onClick={() => setShowNewItem(true)}
-            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
-          >
-            + Nuevo ítem
-          </button>
-          <button
-            onClick={() => setShowNewProject(true)}
-            className="rounded-md bg-neutral-900 text-white px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
-          >
-            + Nuevo proyecto
+            {simpleMode ? "Vista completa" : "Vista simple"}
           </button>
         </div>
       </header>
@@ -245,20 +288,24 @@ export default function InventoryDashboard() {
             </div>
           )}
           <KpiAlerts items={sectionItems} />
-          <SummaryStrip items={sectionItems} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
+          {!simpleMode && <SummaryStrip items={sectionItems} />}
+          <div className={simpleMode ? "" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
+            <div className={simpleMode ? "" : "lg:col-span-2"}>
               <InventoryGrid
                 items={sectionItems}
+                mostUsedIds={mostUsedIds}
+                simpleMode={simpleMode}
                 onQuitar={(item) => setModal({ item, type: "salida" })}
                 onAgregar={(item) => setModal({ item, type: "entrada" })}
                 onEditar={(item) => setEditItem(item)}
                 onHistorial={(item) => setHistoryItem(item)}
               />
             </div>
-            <div>
-              <MovementFeed movements={movements} />
-            </div>
+            {!simpleMode && (
+              <div>
+                <MovementFeed movements={movements} />
+              </div>
+            )}
           </div>
         </>
       )}
