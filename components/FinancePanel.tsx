@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import MiniBarChart from "./MiniBarChart";
+import SupplierPanel from "./SupplierPanel";
 import { exportFinanceReport } from "@/lib/financeReport";
 
 interface RecipeSummary {
@@ -65,7 +66,9 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<FinanceData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"resumen" | "costos" | "precios" | "gastos">("resumen");
+  const [tab, setTab] = useState<"resumen" | "costos" | "precios" | "gastos" | "proveedores">(
+    "resumen"
+  );
   const [newExpenseName, setNewExpenseName] = useState("");
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
 
@@ -159,7 +162,7 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex gap-1 p-1 bg-neutral-100 rounded-lg mb-4 w-fit">
-          {(["resumen", "precios", "costos", "gastos"] as const).map((t) => (
+          {(["resumen", "precios", "costos", "gastos", "proveedores"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -376,6 +379,8 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
               </ul>
             </div>
           )}
+
+          {tab === "proveedores" && <SupplierPanel />}
         </div>
       </div>
     </div>

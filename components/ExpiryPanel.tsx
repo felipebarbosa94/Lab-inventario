@@ -29,7 +29,6 @@ export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose
                 rows.map((r) => ({
                   name: r.name,
                   lote: r.lote,
-                  proveedor: r.proveedor,
                   caducidad: r.caducidad!,
                   quantity: r.quantity,
                   unit: UNIT_LABELS[r.unit],
@@ -70,9 +69,7 @@ export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose
                     <div>
                       <p className="font-medium text-neutral-900">{item.name}</p>
                       <p className="text-xs text-neutral-500">
-                        {[item.lote && `lote ${item.lote}`, item.proveedor]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
+                        {(item.lote && `lote ${item.lote}`) || "—"}
                       </p>
                     </div>
                     <div className="text-right shrink-0">

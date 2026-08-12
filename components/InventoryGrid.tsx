@@ -49,11 +49,10 @@ function ItemCard({
       <p className="text-xs text-neutral-500">
         {[item.project, item.flavor && `sabor ${item.flavor}`].filter(Boolean).join(" · ") || "—"}
       </p>
-      {(item.lote || item.caducidad || item.proveedor) && (
+      {(item.lote || item.caducidad) && (
         <p className="text-xs text-neutral-400 mt-0.5">
           {[
             item.lote && `lote ${item.lote}`,
-            item.proveedor,
             item.caducidad &&
               `cad. ${new Date(item.caducidad).toLocaleDateString("es-MX", {
                 day: "2-digit",

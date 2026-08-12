@@ -1,7 +1,6 @@
 interface ExpiryRow {
   name: string;
   lote: string | null;
-  proveedor: string | null;
   caducidad: string;
   quantity: number;
   unit: string;
@@ -20,7 +19,6 @@ export function exportExpiryReport(rows: ExpiryRow[]) {
       <tr style="${days < 0 ? "color:#b91c1c;" : days <= 15 ? "color:#b45309;" : ""}">
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.name}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.lote ?? "—"}</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.proveedor ?? "—"}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5; text-align:right;">${
           r.quantity
         } ${r.unit}</td>
@@ -53,10 +51,10 @@ export function exportExpiryReport(rows: ExpiryRow[]) {
   <p class="meta">Laboratorio Galenic · Generado ${dateStr}</p>
   <table>
     <thead>
-      <tr><th>Ítem</th><th>Lote</th><th>Proveedor</th><th style="text-align:right;">Cantidad</th><th>Caducidad</th><th>Estado</th></tr>
+      <tr><th>Ítem</th><th>Lote</th><th style="text-align:right;">Cantidad</th><th>Caducidad</th><th>Estado</th></tr>
     </thead>
     <tbody>
-      ${rowsHtml || `<tr><td colspan="6" style="padding:16px; color:#737373;">Nada con caducidad registrada.</td></tr>`}
+      ${rowsHtml || `<tr><td colspan="5" style="padding:16px; color:#737373;">Nada con caducidad registrada.</td></tr>`}
     </tbody>
   </table>
 </body>
