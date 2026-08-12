@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendEmail } from "@/lib/sendEmail";
+import { computeStockoutCounts } from "@/lib/stockouts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface ProdEvent {
@@ -113,6 +114,30 @@ export async function GET(request: Request) {
 
   const netProfit = realizedMargin - monthlyExpenses;
 
+  const [itemsRes, allMovementsRes] = await Promise.all([
+    supabase.from("items").select("id, name"),
+    supabase.from("movements").select("item_id, type, quantity, created_at"),
+  ]);
+  const itemNameById = new Map(
+    (itemsRes.data ?? []).map((i) => [i.id as string, i.name as string])
+  );
+  const stockoutCounts = computeStockoutCounts(allMovementsRes.data ?? []);
+  const topStockouts = [...stockoutCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([itemId, count]) => ({ name: itemNameById.get(itemId) ?? "Ítem eliminado", count }));
+
+  const stockoutsHtml =
+    topStockouts.length > 0
+      ? `
+    <h3>📉 Lo que más se agota</h3>
+    <p style="font-size:13px;color:#525252;">Veces que ha llegado a 0 desde que hay registro.</p>
+    <ul>
+      ${topStockouts.map((r) => `<li>${r.name}: se agotó ${r.count} vez${r.count === 1 ? "" : "es"}</li>`).join("")}
+    </ul>
+  `
+      : "";
+
   const breakevenHtml =
     netProfit >= 0
       ? `<p style="color:#059669;">✅ Cubriste tus gastos fijos — vas ${money(
@@ -135,6 +160,7 @@ export async function GET(request: Request) {
     <p>Ganancia neta: <strong>${money(netProfit)}</strong></p>
     ${breakevenHtml}
     ${negativeMarginHtml}
+    ${stockoutsHtml}
   `;
 
   const to = process.env.ALERT_EMAIL_TO;

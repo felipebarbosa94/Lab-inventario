@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
+import { computeStockoutCounts } from "@/lib/stockouts";
 
 const WINDOW_DAYS = 60;
 
@@ -13,6 +14,11 @@ interface Insight {
   dailyRate: number;
   daysRemaining: number | null;
   suggestedThreshold: number;
+}
+
+interface StockoutRow {
+  item: Item;
+  count: number;
 }
 
 export default function InsightsPanel({
@@ -25,6 +31,8 @@ export default function InsightsPanel({
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
+  const [tab, setTab] = useState<"consumo" | "agotamiento">("consumo");
+  const [stockouts, setStockouts] = useState<StockoutRow[] | null>(null);
 
   useEffect(() => {
     const since = new Date();
@@ -55,6 +63,20 @@ export default function InsightsPanel({
       });
   }, [items]);
 
+  useEffect(() => {
+    supabase
+      .from("movements")
+      .select("item_id, type, quantity, created_at")
+      .then(({ data }) => {
+        const counts = computeStockoutCounts(data ?? []);
+        const rows = items
+          .map((item) => ({ item, count: counts.get(item.id) ?? 0 }))
+          .filter((r) => r.count > 0)
+          .sort((a, b) => b.count - a.count);
+        setStockouts(rows);
+      });
+  }, [items]);
+
   async function applyThreshold(insight: Insight) {
     setApplying(insight.item.id);
     await supabase
@@ -73,11 +95,40 @@ export default function InsightsPanel({
             Cerrar
           </button>
         </div>
-        <p className="text-sm text-neutral-500 mb-4">
-          Basado en tus movimientos de &quot;Quitar&quot; de los últimos {WINDOW_DAYS} días.
-        </p>
+        <div className="flex gap-1 p-1 bg-neutral-100 rounded-lg mb-3 w-fit">
+          <button
+            onClick={() => setTab("consumo")}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              tab === "consumo" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+            }`}
+          >
+            Consumo
+          </button>
+          <button
+            onClick={() => setTab("agotamiento")}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              tab === "agotamiento" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+            }`}
+          >
+            Se agota seguido
+          </button>
+        </div>
+
+        {tab === "consumo" && (
+          <p className="text-sm text-neutral-500 mb-4">
+            Basado en tus movimientos de &quot;Quitar&quot; de los últimos {WINDOW_DAYS} días.
+          </p>
+        )}
+        {tab === "agotamiento" && (
+          <p className="text-sm text-neutral-500 mb-4">
+            Cuántas veces cada ítem ha llegado a 0 desde que hay registro. No cuenta correcciones
+            manuales de cantidad, solo entradas/salidas.
+          </p>
+        )}
 
         <div className="overflow-y-auto flex-1 -mx-5 px-5">
+          {tab === "consumo" && (
+            <>
           {loading && <p className="text-sm text-neutral-400">Analizando...</p>}
           {!loading && insights.length === 0 && (
             <p className="text-sm text-neutral-400 py-8 text-center">
@@ -137,6 +188,35 @@ export default function InsightsPanel({
               );
             })}
           </div>
+            </>
+          )}
+
+          {tab === "agotamiento" && (
+            <>
+              {stockouts === null && <p className="text-sm text-neutral-400">Analizando...</p>}
+              {stockouts !== null && stockouts.length === 0 && (
+                <p className="text-sm text-neutral-400 py-8 text-center">
+                  Ningún ítem ha llegado a 0 desde que hay registro de movimientos. Buena señal.
+                </p>
+              )}
+              <div className="space-y-2">
+                {stockouts?.map((row) => (
+                  <div
+                    key={row.item.id}
+                    className="rounded-lg border border-neutral-200 px-4 py-3 flex justify-between items-center"
+                  >
+                    <p className="font-medium text-neutral-900">{row.item.name}</p>
+                    <p className="text-sm text-neutral-600">
+                      Se agotó{" "}
+                      <span className="font-semibold text-red-600">
+                        {row.count} vez{row.count === 1 ? "" : "es"}
+                      </span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
