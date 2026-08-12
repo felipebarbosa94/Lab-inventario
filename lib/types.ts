@@ -24,6 +24,9 @@ export interface Movement {
   type: MovementType;
   quantity: number;
   note: string | null;
+  lote: string | null;
+  caducidad: string | null;
+  proveedor: string | null;
   created_at: string;
 }
 
@@ -49,7 +52,7 @@ export interface RecipeItem {
 }
 
 export interface RecipeItemWithItem extends RecipeItem {
-  items: Pick<Item, "name" | "unit" | "quantity"> | null;
+  items: Pick<Item, "name" | "unit" | "quantity" | "lote" | "caducidad"> | null;
 }
 
 export interface RecipeWithItems extends Recipe {

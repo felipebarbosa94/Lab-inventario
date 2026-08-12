@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/sendEmail";
 
+const EXPIRY_WINDOW_DAYS = 15;
+const COOLDOWN_DAYS = 7;
+
 interface LowStockItem {
   id: string;
   name: string;
   quantity: number;
   unit: string;
   low_stock_threshold: number;
+}
+
+interface ExpiringItem {
+  id: string;
+  name: string;
+  caducidad: string;
+  lote: string | null;
 }
 
 export async function GET(request: Request) {
@@ -21,45 +31,77 @@ export async function GET(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: items, error: itemsError } = await supabase
-    .from("items")
-    .select("id, name, quantity, unit, low_stock_threshold")
-    .not("low_stock_threshold", "is", null);
+  const cooldownDate = new Date();
+  cooldownDate.setDate(cooldownDate.getDate() - COOLDOWN_DAYS);
 
-  if (itemsError) {
-    return NextResponse.json({ sent: false, error: itemsError.message }, { status: 500 });
+  const expiryLimit = new Date();
+  expiryLimit.setDate(expiryLimit.getDate() + EXPIRY_WINDOW_DAYS);
+
+  const [itemsRes, expiringRes, alertLogRes] = await Promise.all([
+    supabase
+      .from("items")
+      .select("id, name, quantity, unit, low_stock_threshold")
+      .not("low_stock_threshold", "is", null),
+    supabase
+      .from("items")
+      .select("id, name, caducidad, lote")
+      .not("caducidad", "is", null)
+      .lte("caducidad", expiryLimit.toISOString().slice(0, 10)),
+    supabase.from("alert_log").select("item_id, alert_type").gte("sent_at", cooldownDate.toISOString()),
+  ]);
+
+  if (itemsRes.error) {
+    return NextResponse.json({ sent: false, error: itemsRes.error.message }, { status: 500 });
+  }
+  if (expiringRes.error) {
+    return NextResponse.json({ sent: false, error: expiringRes.error.message }, { status: 500 });
   }
 
-  const lowStock = ((items as LowStockItem[]) ?? []).filter(
-    (i) => i.quantity <= i.low_stock_threshold
+  const recentlyAlerted = new Set(
+    (alertLogRes.data ?? []).map((a) => `${a.alert_type}:${a.item_id}`)
   );
 
-  if (lowStock.length === 0) {
-    return NextResponse.json({ sent: false, reason: "no low stock items" });
+  const lowStock = ((itemsRes.data as LowStockItem[]) ?? []).filter(
+    (i) => i.quantity <= i.low_stock_threshold
+  );
+  const lowStockToAlert = lowStock.filter((i) => !recentlyAlerted.has(`low_stock:${i.id}`));
+
+  const expiringToAlert = ((expiringRes.data as ExpiringItem[]) ?? []).filter(
+    (i) => !recentlyAlerted.has(`caducidad:${i.id}`)
+  );
+
+  if (lowStockToAlert.length === 0 && expiringToAlert.length === 0) {
+    return NextResponse.json({ sent: false, reason: "nothing new to alert" });
   }
 
-  const cooldownDate = new Date();
-  cooldownDate.setDate(cooldownDate.getDate() - 7);
-
-  const { data: recentAlerts } = await supabase
-    .from("alert_log")
-    .select("item_id")
-    .gte("sent_at", cooldownDate.toISOString());
-
-  const recentlyAlerted = new Set((recentAlerts ?? []).map((a) => a.item_id as string));
-  const toAlert = lowStock.filter((i) => !recentlyAlerted.has(i.id));
-
-  if (toAlert.length === 0) {
-    return NextResponse.json({ sent: false, reason: "all recently alerted" });
+  const sections: string[] = [];
+  if (lowStockToAlert.length > 0) {
+    const rowsHtml = lowStockToAlert
+      .map(
+        (i) =>
+          `<li>${i.name}: quedan <strong>${i.quantity} ${i.unit}</strong> (umbral ${i.low_stock_threshold})</li>`
+      )
+      .join("");
+    sections.push(`<p>⚠️ Stock bajo:</p><ul>${rowsHtml}</ul>`);
   }
-
-  const rowsHtml = toAlert
-    .map(
-      (i) =>
-        `<li>${i.name}: quedan <strong>${i.quantity} ${i.unit}</strong> (umbral ${i.low_stock_threshold})</li>`
-    )
-    .join("");
-  const html = `<p>⚠️ Stock bajo en el laboratorio:</p><ul>${rowsHtml}</ul>`;
+  if (expiringToAlert.length > 0) {
+    const rowsHtml = expiringToAlert
+      .map((i) => {
+        const days = Math.ceil(
+          (new Date(i.caducidad).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        );
+        const dateLabel = new Date(i.caducidad).toLocaleDateString("es-MX", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+        const status = days < 0 ? "ya caducó" : `caduca en ${days} día${days === 1 ? "" : "s"}`;
+        return `<li>${i.name}${i.lote ? ` (lote ${i.lote})` : ""}: ${dateLabel} — ${status}</li>`;
+      })
+      .join("");
+    sections.push(`<p>⏳ Por caducar o caducado:</p><ul>${rowsHtml}</ul>`);
+  }
+  const html = sections.join("<br/>");
 
   const to = process.env.ALERT_EMAIL_TO;
   if (!to) {
@@ -69,12 +111,19 @@ export async function GET(request: Request) {
     );
   }
 
-  const result = await sendEmail({ to, subject: "⚠️ Inventario Lab — stock bajo", html });
+  const result = await sendEmail({ to, subject: "⚠️ Inventario Lab — alertas", html });
   if (!result.ok) {
     return NextResponse.json({ sent: false, error: result.error }, { status: 500 });
   }
 
-  await supabase.from("alert_log").insert(toAlert.map((i) => ({ item_id: i.id })));
+  await supabase.from("alert_log").insert([
+    ...lowStockToAlert.map((i) => ({ item_id: i.id, alert_type: "low_stock" })),
+    ...expiringToAlert.map((i) => ({ item_id: i.id, alert_type: "caducidad" })),
+  ]);
 
-  return NextResponse.json({ sent: true, count: toAlert.length, items: toAlert.map((i) => i.name) });
+  return NextResponse.json({
+    sent: true,
+    lowStock: lowStockToAlert.map((i) => i.name),
+    expiring: expiringToAlert.map((i) => i.name),
+  });
 }

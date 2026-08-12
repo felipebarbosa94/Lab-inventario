@@ -29,7 +29,7 @@ export default function RecipesPanel({
     setLoading(true);
     const { data } = await supabase
       .from("recipes")
-      .select("*, recipe_items(*, items(name, unit, quantity))")
+      .select("*, recipe_items(*, items(name, unit, quantity, lote, caducidad))")
       .order("name");
     setRecipes((data as RecipeWithItems[]) ?? []);
     setLoading(false);
@@ -38,7 +38,7 @@ export default function RecipesPanel({
   useEffect(() => {
     supabase
       .from("recipes")
-      .select("*, recipe_items(*, items(name, unit, quantity))")
+      .select("*, recipe_items(*, items(name, unit, quantity, lote, caducidad))")
       .order("name")
       .then(({ data }) => {
         setRecipes((data as RecipeWithItems[]) ?? []);

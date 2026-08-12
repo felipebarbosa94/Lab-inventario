@@ -89,6 +89,8 @@ export default function ProduceModal({
         type: "salida",
         quantity: r.needed,
         note: noteText,
+        lote: r.items?.lote ?? null,
+        caducidad: r.items?.caducidad ?? null,
       }))
     );
 

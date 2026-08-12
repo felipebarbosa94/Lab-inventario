@@ -22,7 +22,7 @@ export default function NewProjectFlow({
     setLoadingRecipe(true);
     const { data } = await supabase
       .from("recipes")
-      .select("*, recipe_items(*, items(name, unit, quantity))")
+      .select("*, recipe_items(*, items(name, unit, quantity, lote, caducidad))")
       .eq("id", recipeId)
       .single();
     setLoadingRecipe(false);

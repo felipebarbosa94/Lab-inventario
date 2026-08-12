@@ -16,6 +16,10 @@ import NewProjectFlow from "./NewProjectFlow";
 import InsightsPanel from "./InsightsPanel";
 import MonthlySummaryPanel from "./MonthlySummaryPanel";
 import FinancePanel from "./FinancePanel";
+import ReceiveShipmentModal from "./ReceiveShipmentModal";
+import ExpiryPanel from "./ExpiryPanel";
+import SupplierPanel from "./SupplierPanel";
+import TodayPanel from "./TodayPanel";
 import WorkerNameGate from "./WorkerNameGate";
 import { useWorkerName } from "@/lib/useWorkerName";
 import { useSimpleMode } from "@/lib/useSimpleMode";
@@ -40,6 +44,10 @@ export default function InventoryDashboard() {
   const [backingUp, setBackingUp] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showFinance, setShowFinance] = useState(false);
+  const [showReceive, setShowReceive] = useState(false);
+  const [showExpiry, setShowExpiry] = useState(false);
+  const [showSuppliers, setShowSuppliers] = useState(false);
+  const [showToday, setShowToday] = useState(false);
   const [mostUsedIds, setMostUsedIds] = useState<string[]>([]);
 
   async function handleBackup() {
@@ -182,13 +190,37 @@ export default function InventoryDashboard() {
               >
                 Sugerencias
               </button>
+              <button
+                onClick={() => setShowSuppliers(true)}
+                className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+              >
+                Proveedores
+              </button>
             </>
           )}
+          <button
+            onClick={() => setShowToday(true)}
+            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+          >
+            Hoy
+          </button>
           <button
             onClick={() => setShowRecipes(true)}
             className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
           >
             Recetas
+          </button>
+          <button
+            onClick={() => setShowReceive(true)}
+            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+          >
+            Recibir mercancía
+          </button>
+          <button
+            onClick={() => setShowExpiry(true)}
+            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+          >
+            Vencimientos
           </button>
           {!simpleMode && (
             <>
@@ -338,6 +370,16 @@ export default function InventoryDashboard() {
       {showInsights && <InsightsPanel items={items} onClose={() => setShowInsights(false)} />}
       {showMonthly && <MonthlySummaryPanel onClose={() => setShowMonthly(false)} />}
       {showFinance && <FinancePanel onClose={() => setShowFinance(false)} />}
+      {showReceive && (
+        <ReceiveShipmentModal
+          items={items}
+          workerName={name}
+          onClose={() => setShowReceive(false)}
+        />
+      )}
+      {showExpiry && <ExpiryPanel items={items} onClose={() => setShowExpiry(false)} />}
+      {showSuppliers && <SupplierPanel onClose={() => setShowSuppliers(false)} />}
+      {showToday && <TodayPanel workerName={name} onClose={() => setShowToday(false)} />}
       {showNewProject && (
         <NewProjectFlow items={items} workerName={name} onClose={() => setShowNewProject(false)} />
       )}
