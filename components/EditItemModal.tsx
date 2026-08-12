@@ -21,6 +21,9 @@ export default function EditItemModal({
   const [threshold, setThreshold] = useState(
     item.low_stock_threshold !== null ? String(item.low_stock_threshold) : ""
   );
+  const [lote, setLote] = useState(item.lote ?? "");
+  const [caducidad, setCaducidad] = useState(item.caducidad ?? "");
+  const [proveedor, setProveedor] = useState(item.proveedor ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +47,9 @@ export default function EditItemModal({
         unit,
         quantity: Number(quantity) || 0,
         low_stock_threshold: threshold ? Number(threshold) : null,
+        lote: lote.trim() || null,
+        caducidad: caducidad || null,
+        proveedor: proveedor.trim() || null,
       })
       .eq("id", item.id);
     setSaving(false);
@@ -158,6 +164,45 @@ export default function EditItemModal({
               />
             </div>
           </div>
+          {category === "materia_prima" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Número de lote
+                </label>
+                <input
+                  type="text"
+                  value={lote}
+                  onChange={(e) => setLote(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                  placeholder="opcional"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Caducidad
+                </label>
+                <input
+                  type="date"
+                  value={caducidad}
+                  onChange={(e) => setCaducidad(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Proveedor
+                </label>
+                <input
+                  type="text"
+                  value={proveedor}
+                  onChange={(e) => setProveedor(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                  placeholder="opcional"
+                />
+              </div>
+            </div>
+          )}
           <p className="text-xs text-neutral-400">
             Corregir la cantidad aquí no queda registrado en el historial de movimientos — es un
             ajuste directo, no un uso.

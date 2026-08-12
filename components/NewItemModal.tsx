@@ -13,6 +13,9 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
   const [unit, setUnit] = useState<Unit>("unidad");
   const [quantity, setQuantity] = useState("");
   const [threshold, setThreshold] = useState("");
+  const [lote, setLote] = useState("");
+  const [caducidad, setCaducidad] = useState("");
+  const [proveedor, setProveedor] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +35,9 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
       unit,
       quantity: Number(quantity) || 0,
       low_stock_threshold: threshold ? Number(threshold) : null,
+      lote: lote.trim() || null,
+      caducidad: caducidad || null,
+      proveedor: proveedor.trim() || null,
     });
     setSaving(false);
     if (insertError) {
@@ -135,6 +141,45 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
               />
             </div>
           </div>
+          {category === "materia_prima" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Número de lote
+                </label>
+                <input
+                  type="text"
+                  value={lote}
+                  onChange={(e) => setLote(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                  placeholder="opcional"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Caducidad
+                </label>
+                <input
+                  type="date"
+                  value={caducidad}
+                  onChange={(e) => setCaducidad(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Proveedor
+                </label>
+                <input
+                  type="text"
+                  value={proveedor}
+                  onChange={(e) => setProveedor(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
+                  placeholder="opcional"
+                />
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button

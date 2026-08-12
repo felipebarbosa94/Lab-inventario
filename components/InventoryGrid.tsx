@@ -20,10 +20,18 @@ function ItemCard({
   onHistorial: (item: Item) => void;
 }) {
   const low = item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold;
+
+  const [now] = useState(() => Date.now());
+  const daysToExpire = item.caducidad
+    ? Math.ceil((new Date(item.caducidad).getTime() - now) / (1000 * 60 * 60 * 24))
+    : null;
+  const expired = daysToExpire !== null && daysToExpire < 0;
+  const expiringSoon = daysToExpire !== null && daysToExpire >= 0 && daysToExpire <= 30;
+
   return (
     <div
       className={`rounded-lg border shadow-sm bg-white ${simple ? "px-4 py-4" : "px-4 py-3"} ${
-        low ? "border-red-300" : "border-neutral-200"
+        low || expired ? "border-red-300" : expiringSoon ? "border-amber-300" : "border-neutral-200"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -41,6 +49,26 @@ function ItemCard({
       <p className="text-xs text-neutral-500">
         {[item.project, item.flavor && `sabor ${item.flavor}`].filter(Boolean).join(" · ") || "—"}
       </p>
+      {(item.lote || item.caducidad || item.proveedor) && (
+        <p className="text-xs text-neutral-400 mt-0.5">
+          {[
+            item.lote && `lote ${item.lote}`,
+            item.proveedor,
+            item.caducidad &&
+              `cad. ${new Date(item.caducidad).toLocaleDateString("es-MX", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              })}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          {expired && <span className="text-red-600 font-medium"> — caducado</span>}
+          {!expired && expiringSoon && (
+            <span className="text-amber-600 font-medium"> — caduca pronto</span>
+          )}
+        </p>
+      )}
       <button
         onClick={() => onHistorial(item)}
         className={`font-bold mt-2 block text-left hover:underline ${

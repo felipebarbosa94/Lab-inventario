@@ -10,6 +10,9 @@ export interface Item {
   unit: Unit;
   quantity: number;
   low_stock_threshold: number | null;
+  lote: string | null;
+  caducidad: string | null;
+  proveedor: string | null;
   created_at: string;
   updated_at: string;
 }
