@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Item, RecipeWithItems } from "@/lib/types";
+import { Item, Project, RecipeWithItems } from "@/lib/types";
+import { generateLotCode } from "@/lib/projectCode";
 import RecipeFormModal from "./RecipeFormModal";
 import ProduceModal from "./ProduceModal";
 
@@ -16,6 +17,7 @@ export default function NewProjectFlow({
   onClose: () => void;
 }) {
   const [createdRecipe, setCreatedRecipe] = useState<RecipeWithItems | null>(null);
+  const [createdProject, setCreatedProject] = useState<Project | null>(null);
   const [loadingRecipe, setLoadingRecipe] = useState(false);
 
   async function handleCreated(recipeId: string) {
@@ -25,16 +27,39 @@ export default function NewProjectFlow({
       .select("*, recipe_items(*, items(name, unit, quantity, lote, caducidad))")
       .eq("id", recipeId)
       .single();
-    setLoadingRecipe(false);
-    if (data) {
-      setCreatedRecipe(data as unknown as RecipeWithItems);
-    } else {
+    if (!data) {
+      setLoadingRecipe(false);
       onClose();
+      return;
     }
+    const recipe = data as unknown as RecipeWithItems;
+
+    const lotCode = await generateLotCode(supabase, recipe.project);
+    const { data: project } = await supabase
+      .from("projects")
+      .insert({
+        name: recipe.name,
+        client: recipe.project,
+        lot_code: lotCode,
+        recipe_id: recipe.id,
+      })
+      .select()
+      .single();
+
+    setLoadingRecipe(false);
+    setCreatedProject((project as Project) ?? null);
+    setCreatedRecipe(recipe);
   }
 
   if (createdRecipe) {
-    return <ProduceModal recipe={createdRecipe} workerName={workerName} onClose={onClose} />;
+    return (
+      <ProduceModal
+        recipe={createdRecipe}
+        workerName={workerName}
+        project={createdProject}
+        onClose={onClose}
+      />
+    );
   }
 
   if (loadingRecipe) {

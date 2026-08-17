@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { RecipeWithItems } from "@/lib/types";
+import { Project, RecipeWithItems } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
 import { openProductionOrder } from "@/lib/productionOrder";
 
 export default function ProduceModal({
   recipe,
   workerName,
+  project,
   onClose,
 }: {
   recipe: RecipeWithItems;
   workerName: string;
+  project?: Project | null;
   onClose: () => void;
 }) {
   // Recetas nuevas guardan cantidad/unidad de lote por separado; las viejas
@@ -88,7 +90,8 @@ export default function ProduceModal({
         short: r.short,
         available: r.available,
       })),
-      workerName
+      workerName,
+      project?.lot_code
     );
   }
 
@@ -132,7 +135,14 @@ export default function ProduceModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-semibold text-neutral-900 mb-1">Producir — {recipe.name}</h3>
-        {recipe.project && <p className="text-sm text-neutral-500 mb-4">{recipe.project}</p>}
+        <div className="mb-4">
+          {recipe.project && <p className="text-sm text-neutral-500">{recipe.project}</p>}
+          {project?.lot_code && (
+            <p className="text-xs text-neutral-400">
+              Lote interno: <span className="font-mono font-medium">{project.lot_code}</span>
+            </p>
+          )}
+        </div>
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>

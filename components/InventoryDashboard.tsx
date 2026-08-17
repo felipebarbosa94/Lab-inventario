@@ -20,6 +20,7 @@ import ReceiveShipmentModal from "./ReceiveShipmentModal";
 import ExpiryPanel from "./ExpiryPanel";
 import TodayPanel from "./TodayPanel";
 import HelpPanel from "./HelpPanel";
+import ProjectsPanel from "./ProjectsPanel";
 import WorkerNameGate from "./WorkerNameGate";
 import { useWorkerName } from "@/lib/useWorkerName";
 import { useSimpleMode } from "@/lib/useSimpleMode";
@@ -48,6 +49,7 @@ export default function InventoryDashboard() {
   const [showExpiry, setShowExpiry] = useState(false);
   const [showToday, setShowToday] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
   const [mostUsedIds, setMostUsedIds] = useState<string[]>([]);
 
   async function handleBackup() {
@@ -216,6 +218,12 @@ export default function InventoryDashboard() {
           >
             Vencimientos
           </button>
+          <button
+            onClick={() => setShowProjects(true)}
+            className="rounded-md border border-neutral-300 text-neutral-700 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium"
+          >
+            Proyectos
+          </button>
           {!simpleMode && (
             <>
               <button
@@ -380,6 +388,7 @@ export default function InventoryDashboard() {
       {showExpiry && <ExpiryPanel items={items} onClose={() => setShowExpiry(false)} />}
       {showToday && <TodayPanel workerName={name} onClose={() => setShowToday(false)} />}
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
+      {showProjects && <ProjectsPanel onClose={() => setShowProjects(false)} />}
       {showNewProject && (
         <NewProjectFlow items={items} workerName={name} onClose={() => setShowNewProject(false)} />
       )}

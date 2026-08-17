@@ -12,7 +12,8 @@ export function openProductionOrder(
   recipe: RecipeWithItems,
   batchCount: number,
   rows: OrderRow[],
-  workerName: string
+  workerName: string,
+  lotCode?: string | null
 ) {
   const dateStr = new Date().toLocaleString("es-MX", {
     dateStyle: "long",
@@ -58,6 +59,7 @@ export function openProductionOrder(
   <p class="meta">
     <strong>${recipe.name}</strong>${recipe.project ? ` — ${recipe.project}` : ""}<br/>
     ${batchCount} lote(s) de ${recipe.batch_label}<br/>
+    ${lotCode ? `<strong>Lote interno: ${lotCode}</strong><br/>` : ""}
     Generada por ${workerName} — ${dateStr}
   </p>
   <table>
