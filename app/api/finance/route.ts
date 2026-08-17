@@ -51,8 +51,19 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month"); // "YYYY-MM", opcional
+  const historyItemId = searchParams.get("item_history"); // opcional
 
   const supabase = getSupabaseAdmin();
+
+  if (historyItemId) {
+    const { data, error } = await supabase
+      .from("item_cost_history")
+      .select("unit_cost, recorded_at")
+      .eq("item_id", historyItemId)
+      .order("recorded_at", { ascending: true });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ history: data ?? [] });
+  }
 
   const [itemsRes, recipesRes, recipeItemsRes, costsRes, pricingRes, expensesRes] =
     await Promise.all([
@@ -180,10 +191,23 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
 
   if (body.action === "save_cost") {
+    const { data: existing } = await supabase
+      .from("item_costs")
+      .select("unit_cost")
+      .eq("item_id", body.item_id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("item_costs")
       .upsert({ item_id: body.item_id, unit_cost: body.unit_cost, updated_at: new Date().toISOString() });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (!existing || Number(existing.unit_cost) !== Number(body.unit_cost)) {
+      await supabase
+        .from("item_cost_history")
+        .insert({ item_id: body.item_id, unit_cost: body.unit_cost });
+    }
+
     return NextResponse.json({ ok: true });
   }
 

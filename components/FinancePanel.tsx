@@ -3,6 +3,7 @@
 import { useState } from "react";
 import MiniBarChart from "./MiniBarChart";
 import SupplierPanel from "./SupplierPanel";
+import PriceTrendChart from "./PriceTrendChart";
 import { exportFinanceReport } from "@/lib/financeReport";
 
 interface RecipeSummary {
@@ -323,7 +324,7 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
           {tab === "costos" && (
             <div className="space-y-2">
               {data.items.map((item) => (
-                <ItemCostRow key={item.id} item={item} onSave={post} />
+                <ItemCostRow key={item.id} item={item} onSave={post} pin={pin} />
               ))}
             </div>
           )}
@@ -469,35 +470,118 @@ function RecipePriceRow({
 function ItemCostRow({
   item,
   onSave,
+  pin,
 }: {
   item: ItemCost;
   onSave: (action: string, payload: Record<string, unknown>) => Promise<boolean>;
+  pin: string;
 }) {
   const [cost, setCost] = useState(item.unit_cost?.toString() ?? "");
   const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<{ unit_cost: number; recorded_at: string }[] | null>(
+    null
+  );
+  const [historyError, setHistoryError] = useState(false);
+
+  async function loadHistory() {
+    setShowHistory((v) => !v);
+    if (history !== null || historyError) return;
+    const res = await fetch(`/api/finance?item_history=${item.id}`, {
+      headers: { "x-finance-pin": pin },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setHistory(json.history ?? []);
+    } else {
+      setHistoryError(true);
+    }
+  }
 
   return (
-    <div className="flex items-center gap-2 text-sm border-b border-neutral-100 pb-2">
-      <span className="flex-1 text-neutral-700">{item.name}</span>
-      <input
-        type="number"
-        value={cost}
-        onChange={(e) => setCost(e.target.value)}
-        className="w-24 rounded-md border border-neutral-300 px-2 py-1"
-        placeholder="0"
-      />
-      <span className="text-xs text-neutral-400 w-8">/{item.unit}</span>
-      <button
-        onClick={async () => {
-          setSaving(true);
-          await onSave("save_cost", { item_id: item.id, unit_cost: Number(cost) });
-          setSaving(false);
-        }}
-        disabled={saving}
-        className="rounded-md border border-neutral-300 px-2 py-1"
-      >
-        {saving ? "..." : "Guardar"}
-      </button>
+    <div className="border-b border-neutral-100 pb-2">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="flex-1 text-neutral-700">{item.name}</span>
+        <input
+          type="number"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          className="w-24 rounded-md border border-neutral-300 px-2 py-1"
+          placeholder="0"
+        />
+        <span className="text-xs text-neutral-400 w-8">/{item.unit}</span>
+        <button
+          onClick={async () => {
+            setSaving(true);
+            await onSave("save_cost", { item_id: item.id, unit_cost: Number(cost) });
+            setHistory(null);
+            setSaving(false);
+          }}
+          disabled={saving}
+          className="rounded-md border border-neutral-300 px-2 py-1"
+        >
+          {saving ? "..." : "Guardar"}
+        </button>
+        <button
+          onClick={loadHistory}
+          className="text-xs text-neutral-400 hover:text-neutral-700 shrink-0"
+        >
+          {showHistory ? "Ocultar" : "Historial"}
+        </button>
+      </div>
+      {showHistory && (
+        <div className="mt-2 ml-1 pl-2 border-l-2 border-neutral-200 space-y-1">
+          {history === null && !historyError && (
+            <p className="text-xs text-neutral-400">Cargando...</p>
+          )}
+          {historyError && (
+            <p className="text-xs text-red-500">
+              No se pudo cargar el historial — falta correr la migración en Supabase.
+            </p>
+          )}
+          {history !== null && history.length === 0 && (
+            <p className="text-xs text-neutral-400">
+              Sin historial todavía — se empieza a guardar desde ahora, cada vez que cambies el
+              costo.
+            </p>
+          )}
+          {history !== null && history.length === 1 && (
+            <p className="text-xs text-neutral-400">
+              Solo hay un registro — la gráfica aparece en cuanto haya al menos dos.
+            </p>
+          )}
+          {history !== null && history.length >= 2 && (
+            <div className="mb-2">
+              <PriceTrendChart
+                data={history.map((h) => ({ date: h.recorded_at, value: h.unit_cost }))}
+                unit={item.unit}
+              />
+            </div>
+          )}
+          {history !== null &&
+            history.map((h, i) => {
+              const prev = i > 0 ? history[i - 1].unit_cost : null;
+              const diff = prev !== null ? h.unit_cost - prev : null;
+              return (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-neutral-500">
+                    {new Date(h.recorded_at).toLocaleDateString("es-MX")}
+                  </span>
+                  <span className="text-neutral-700">
+                    {money(h.unit_cost)}
+                    {diff !== null && diff !== 0 && (
+                      <span className={diff > 0 ? "text-red-600" : "text-emerald-600"}>
+                        {" "}
+                        ({diff > 0 ? "+" : ""}
+                        {money(diff)})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+        </div>
+      )}
     </div>
   );
 }
