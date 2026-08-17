@@ -15,9 +15,11 @@ export default function ProduceModal({
   workerName: string;
   onClose: () => void;
 }) {
-  const batchMatch = recipe.batch_label.match(/^([\d.]+)\s*(.*)$/);
-  const batchNumber = batchMatch ? Number(batchMatch[1]) : null;
-  const batchUnitLabel = batchMatch ? batchMatch[2].trim() : null;
+  // Recetas nuevas guardan cantidad/unidad de lote por separado; las viejas
+  // solo tienen batch_label como texto libre, así que intentamos parsearlo.
+  const legacyMatch = recipe.batch_label.match(/^([\d.]+)\s*(.*)$/);
+  const batchNumber = recipe.batch_quantity ?? (legacyMatch ? Number(legacyMatch[1]) : null);
+  const batchUnitLabel = recipe.batch_unit ?? (legacyMatch ? legacyMatch[2].trim() : null);
   const canScaleByTotal = batchNumber !== null && batchNumber > 0;
 
   const [batches, setBatches] = useState("1");

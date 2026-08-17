@@ -4,6 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item, RecipeWithItems } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
+import { PRODUCT_TYPES, PRODUCT_TYPE_OPTIONS, BATCH_UNIT_LABELS, unitsForType } from "@/lib/productTypes";
 
 interface Row {
   item_id: string;
@@ -23,7 +24,13 @@ export default function RecipeFormModal({
 }) {
   const [name, setName] = useState(recipe?.name ?? "");
   const [project, setProject] = useState(recipe?.project ?? "");
-  const [batchLabel, setBatchLabel] = useState(recipe?.batch_label ?? "1 kg");
+  const [productType, setProductType] = useState(recipe?.product_type ?? "polvo");
+  const [batchQuantity, setBatchQuantity] = useState(
+    recipe?.batch_quantity != null ? String(recipe.batch_quantity) : "1"
+  );
+  const [batchUnit, setBatchUnit] = useState(
+    recipe?.batch_unit ?? unitsForType(recipe?.product_type ?? "polvo")[0]
+  );
   const [steps, setSteps] = useState(recipe?.steps ?? "");
   const [rows, setRows] = useState<Row[]>(
     recipe?.recipe_items.map((ri) => ({
@@ -35,6 +42,13 @@ export default function RecipeFormModal({
   const [error, setError] = useState<string | null>(null);
 
   const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  const allowedUnits = unitsForType(productType);
+
+  function handleProductTypeChange(value: string) {
+    setProductType(value);
+    const units = unitsForType(value);
+    if (!units.includes(batchUnit)) setBatchUnit(units[0]);
+  }
 
   function updateRow(index: number, patch: Partial<Row>) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -62,13 +76,18 @@ export default function RecipeFormModal({
     setSaving(true);
     setError(null);
 
+    const batchLabel = `${batchQuantity} ${BATCH_UNIT_LABELS[batchUnit] ?? batchUnit}`;
+
     if (recipe) {
       const { error: updateError } = await supabase
         .from("recipes")
         .update({
           name: name.trim(),
           project: project.trim() || null,
-          batch_label: batchLabel.trim() || "unidad",
+          product_type: productType,
+          batch_quantity: Number(batchQuantity),
+          batch_unit: batchUnit,
+          batch_label: batchLabel,
           steps: steps.trim() || null,
           updated_at: new Date().toISOString(),
         })
@@ -98,7 +117,10 @@ export default function RecipeFormModal({
         .insert({
           name: name.trim(),
           project: project.trim() || null,
-          batch_label: batchLabel.trim() || "unidad",
+          product_type: productType,
+          batch_quantity: Number(batchQuantity),
+          batch_unit: batchUnit,
+          batch_label: batchLabel,
           steps: steps.trim() || null,
         })
         .select()
@@ -169,16 +191,52 @@ export default function RecipeFormModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">
-                ¿Qué es &quot;1 lote&quot;?
+                Tipo de producto
               </label>
-              <input
-                type="text"
-                value={batchLabel}
-                onChange={(e) => setBatchLabel(e.target.value)}
+              <select
+                value={productType}
+                onChange={(e) => handleProductTypeChange(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                placeholder="ej. 1 kg, 1 frasco"
-              />
+              >
+                {PRODUCT_TYPE_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {PRODUCT_TYPES[t].label}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              ¿Qué es &quot;1 lote&quot;?
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={batchQuantity}
+                onChange={(e) => setBatchQuantity(e.target.value)}
+                className="flex-1 rounded-md border border-neutral-300 px-3 py-2"
+              />
+              <select
+                value={batchUnit}
+                onChange={(e) => setBatchUnit(e.target.value)}
+                className="w-32 rounded-md border border-neutral-300 px-3 py-2"
+              >
+                {allowedUnits.map((u) => (
+                  <option key={u} value={u}>
+                    {BATCH_UNIT_LABELS[u] ?? u}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-neutral-400 mt-1">
+              Solo puedes elegir unidades que tienen sentido para &quot;
+              {PRODUCT_TYPES[productType as keyof typeof PRODUCT_TYPES]?.label ?? productType}
+              &quot; — así evitamos poner litros a algo que se mide en kg, por ejemplo.
+            </p>
           </div>
 
           <div>

@@ -39,6 +39,9 @@ export interface Recipe {
   name: string;
   project: string | null;
   batch_label: string;
+  product_type: string | null;
+  batch_quantity: number | null;
+  batch_unit: string | null;
   steps: string | null;
   created_at: string;
   updated_at: string;
