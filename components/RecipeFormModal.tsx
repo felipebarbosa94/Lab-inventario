@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Item, RecipeWithItems } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
 import { PRODUCT_TYPES, PRODUCT_TYPE_OPTIONS, BATCH_UNIT_LABELS, unitsForType } from "@/lib/productTypes";
+import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
 
 interface Row {
   item_id: string;
@@ -43,6 +44,7 @@ export default function RecipeFormModal({
 
   const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
   const allowedUnits = unitsForType(productType);
+  const projectSuggestions = useProjectSuggestions();
 
   function handleProductTypeChange(value: string) {
     setProductType(value);
@@ -183,11 +185,17 @@ export default function RecipeFormModal({
               </label>
               <input
                 type="text"
+                list="project-suggestions"
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                placeholder="Rafas, Daniela..."
+                placeholder="Rafas, NOU..."
               />
+              <datalist id="project-suggestions">
+                {projectSuggestions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">

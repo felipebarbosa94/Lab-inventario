@@ -4,11 +4,13 @@ import { useState } from "react";
 import { CATEGORY_LABELS, CATEGORY_OPTIONS } from "@/lib/categories";
 import { supabase } from "@/lib/supabase";
 import { Unit } from "@/lib/types";
+import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
 
 export default function NewItemModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(CATEGORY_OPTIONS[0]);
   const [project, setProject] = useState("");
+  const projectSuggestions = useProjectSuggestions();
   const [flavor, setFlavor] = useState("");
   const [unit, setUnit] = useState<Unit>("unidad");
   const [quantity, setQuantity] = useState("");
@@ -84,11 +86,17 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
               </label>
               <input
                 type="text"
+                list="project-suggestions"
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                placeholder="Daniela, Rafas..."
+                placeholder="Rafas, NOU..."
               />
+              <datalist id="project-suggestions">
+                {projectSuggestions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Sabor</label>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CATEGORY_LABELS, CATEGORY_OPTIONS } from "@/lib/categories";
 import { supabase } from "@/lib/supabase";
 import { Item, Unit } from "@/lib/types";
+import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
 
 export default function EditItemModal({
   item,
@@ -15,6 +16,7 @@ export default function EditItemModal({
   const [name, setName] = useState(item.name);
   const [category, setCategory] = useState(item.category);
   const [project, setProject] = useState(item.project ?? "");
+  const projectSuggestions = useProjectSuggestions();
   const [flavor, setFlavor] = useState(item.flavor ?? "");
   const [unit, setUnit] = useState<Unit>(item.unit);
   const [quantity, setQuantity] = useState(String(item.quantity));
@@ -108,11 +110,17 @@ export default function EditItemModal({
               </label>
               <input
                 type="text"
+                list="project-suggestions"
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                placeholder="Daniela, Rafas..."
+                placeholder="Rafas, NOU..."
               />
+              <datalist id="project-suggestions">
+                {projectSuggestions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Sabor</label>
