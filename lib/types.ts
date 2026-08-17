@@ -62,6 +62,13 @@ export interface RecipeWithItems extends Recipe {
   recipe_items: RecipeItemWithItem[];
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  brand: string | null;
+  created_at: string;
+}
+
 export type ProjectStatus = "en_progreso" | "completado";
 
 export interface Project {

@@ -183,19 +183,21 @@ export default function RecipeFormModal({
               <label className="block text-sm font-medium text-neutral-700 mb-1">
                 Proyecto/marca
               </label>
-              <input
-                type="text"
-                list="project-suggestions"
+              <select
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                placeholder="Rafas, NOU..."
-              />
-              <datalist id="project-suggestions">
+              >
+                <option value="">Sin proyecto/marca</option>
+                {project && !projectSuggestions.includes(project) && (
+                  <option value={project}>{project} (no está en la lista)</option>
+                )}
                 {projectSuggestions.map((p) => (
-                  <option key={p} value={p} />
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">
