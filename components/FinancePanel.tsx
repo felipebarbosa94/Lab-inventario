@@ -39,9 +39,21 @@ interface MonthHistory {
   netProfit: number;
 }
 
+interface ProjectProfit {
+  id: string;
+  name: string;
+  client: string | null;
+  lot_code: string | null;
+  status: string;
+  batches: number;
+  profit: number | null;
+  missingCost: boolean;
+}
+
 interface FinanceData {
   recipes: RecipeSummary[];
   negativeMarginRecipes: RecipeSummary[];
+  projectProfits: ProjectProfit[];
   items: ItemCost[];
   expenses: Expense[];
   month: string;
@@ -67,7 +79,9 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<FinanceData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"resumen" | "costos" | "precios" | "gastos" | "proveedores">(
+  const [tab, setTab] = useState<
+    "resumen" | "costos" | "precios" | "gastos" | "proveedores" | "proyectos"
+  >(
     "resumen"
   );
   const [newExpenseName, setNewExpenseName] = useState("");
@@ -163,7 +177,8 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex gap-1 p-1 bg-neutral-100 rounded-lg mb-4 w-fit">
-          {(["resumen", "precios", "costos", "gastos", "proveedores"] as const).map((t) => (
+          {(["resumen", "precios", "costos", "gastos", "proveedores", "proyectos"] as const).map(
+            (t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -382,6 +397,47 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
           )}
 
           {tab === "proveedores" && <SupplierPanel />}
+
+          {tab === "proyectos" && (
+            <div className="space-y-2">
+              {data.projectProfits.length === 0 && (
+                <p className="text-sm text-neutral-400 py-8 text-center">
+                  Todavía no hay proyectos. Se crean solos al usar &quot;+ Nuevo proyecto&quot;.
+                </p>
+              )}
+              {data.projectProfits.map((p) => (
+                <div key={p.id} className="rounded-lg border border-neutral-200 px-3 py-2.5">
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <p className="font-medium text-neutral-900">{p.name}</p>
+                      <p className="text-xs text-neutral-500">
+                        {[p.client, p.lot_code].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {p.profit !== null ? (
+                        <p
+                          className={`text-sm font-semibold ${
+                            p.profit >= 0 ? "text-emerald-600" : "text-red-600"
+                          }`}
+                        >
+                          {money(p.profit)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-neutral-400">
+                          {p.missingCost ? "falta costo/precio" : "sin producción aún"}
+                        </p>
+                      )}
+                      <p className="text-xs text-neutral-400">
+                        {p.batches} lote{p.batches === 1 ? "" : "s"} ·{" "}
+                        {p.status === "completado" ? "completado" : "en progreso"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ history: data ?? [] });
   }
 
-  const [itemsRes, recipesRes, recipeItemsRes, costsRes, pricingRes, expensesRes] =
+  const [itemsRes, recipesRes, recipeItemsRes, costsRes, pricingRes, expensesRes, projectsRes] =
     await Promise.all([
       supabase.from("items").select("id, name, unit, category"),
       supabase.from("recipes").select("id, name, project, batch_label"),
@@ -73,6 +73,10 @@ export async function GET(request: Request) {
       supabase.from("item_costs").select("item_id, unit_cost"),
       supabase.from("recipe_pricing").select("recipe_id, selling_price"),
       supabase.from("expenses").select("id, name, amount, frequency, created_at").order("created_at"),
+      supabase
+        .from("projects")
+        .select("id, name, client, lot_code, recipe_id, status, started_at, completed_at")
+        .order("started_at", { ascending: false }),
     ]);
 
   const items = itemsRes.data ?? [];
@@ -167,9 +171,45 @@ export async function GET(request: Request) {
     });
   }
 
+  const recipeById = new Map(recipeSummaries.map((r) => [r.id as string, r]));
+  const projects = projectsRes.data ?? [];
+  const projectProfits = await Promise.all(
+    projects.map(async (p) => {
+      const recipe = p.recipe_id ? recipeById.get(p.recipe_id as string) : undefined;
+      if (!recipe) {
+        return {
+          id: p.id,
+          name: p.name,
+          client: p.client,
+          lot_code: p.lot_code,
+          status: p.status,
+          batches: 0,
+          profit: null as number | null,
+          missingCost: true,
+        };
+      }
+      const windowEnd = (p.completed_at as string | null) ?? new Date().toISOString();
+      const batchesMap = await batchesByRecipeName(supabase, p.started_at as string, windowEnd);
+      const batches = batchesMap.get(recipe.name as string) ?? 0;
+      const profit =
+        recipe.margin_per_batch !== null && batches > 0 ? recipe.margin_per_batch * batches : null;
+      return {
+        id: p.id,
+        name: p.name,
+        client: p.client,
+        lot_code: p.lot_code,
+        status: p.status,
+        batches,
+        profit,
+        missingCost: recipe.missing_cost || recipe.selling_price === null,
+      };
+    })
+  );
+
   return NextResponse.json({
     recipes: recipeSummaries,
     negativeMarginRecipes,
+    projectProfits,
     items: items.map((i) => ({
       ...i,
       unit_cost: costByItem.get(i.id as string) ?? null,
