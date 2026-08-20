@@ -6,10 +6,12 @@ import { Item, RecipeWithItems } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
 import { PRODUCT_TYPES, PRODUCT_TYPE_OPTIONS, BATCH_UNIT_LABELS, unitsForType } from "@/lib/productTypes";
 import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
+import { convertQuantity, entryUnitOptions, EntryUnit } from "@/lib/units";
 
 interface Row {
   item_id: string;
   quantity_per_batch: string;
+  entryUnit: EntryUnit | null;
 }
 
 export default function RecipeFormModal({
@@ -37,7 +39,8 @@ export default function RecipeFormModal({
     recipe?.recipe_items.map((ri) => ({
       item_id: ri.item_id,
       quantity_per_batch: String(ri.quantity_per_batch),
-    })) ?? [{ item_id: "", quantity_per_batch: "" }]
+      entryUnit: null,
+    })) ?? [{ item_id: "", quantity_per_batch: "", entryUnit: null }]
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +59,13 @@ export default function RecipeFormModal({
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   }
 
+  function selectRowItem(index: number, itemId: string) {
+    const item = items.find((it) => it.id === itemId);
+    updateRow(index, { item_id: itemId, entryUnit: item ? item.unit : null });
+  }
+
   function addRow() {
-    setRows((prev) => [...prev, { item_id: "", quantity_per_batch: "" }]);
+    setRows((prev) => [...prev, { item_id: "", quantity_per_batch: "", entryUnit: null }]);
   }
 
   function removeRow(index: number) {
@@ -79,6 +87,12 @@ export default function RecipeFormModal({
     setError(null);
 
     const batchLabel = `${batchQuantity} ${BATCH_UNIT_LABELS[batchUnit] ?? batchUnit}`;
+
+    function resolvedQuantity(r: Row): number {
+      const item = items.find((it) => it.id === r.item_id);
+      if (!item) return Number(r.quantity_per_batch);
+      return convertQuantity(Number(r.quantity_per_batch), r.entryUnit ?? item.unit, item.unit);
+    }
 
     if (recipe) {
       const { error: updateError } = await supabase
@@ -104,7 +118,7 @@ export default function RecipeFormModal({
         validRows.map((r) => ({
           recipe_id: recipe.id,
           item_id: r.item_id,
-          quantity_per_batch: Number(r.quantity_per_batch),
+          quantity_per_batch: resolvedQuantity(r),
         }))
       );
       setSaving(false);
@@ -136,7 +150,7 @@ export default function RecipeFormModal({
         validRows.map((r) => ({
           recipe_id: newRecipe.id,
           item_id: r.item_id,
-          quantity_per_batch: Number(r.quantity_per_batch),
+          quantity_per_batch: resolvedQuantity(r),
         }))
       );
       setSaving(false);
@@ -256,40 +270,67 @@ export default function RecipeFormModal({
             <div className="space-y-2">
               {rows.map((row, i) => {
                 const selected = items.find((it) => it.id === row.item_id);
+                const unitOptions = selected ? entryUnitOptions(selected.unit) : [];
+                const rawQty = Number(row.quantity_per_batch) || 0;
+                const entryUnit = row.entryUnit ?? selected?.unit ?? null;
+                const convertedQty =
+                  selected && entryUnit ? convertQuantity(rawQty, entryUnit, selected.unit) : rawQty;
                 return (
-                  <div key={i} className="flex gap-2 items-center">
-                    <select
-                      value={row.item_id}
-                      onChange={(e) => updateRow(i, { item_id: e.target.value })}
-                      className="flex-1 rounded-md border border-neutral-300 px-2 py-2 text-sm"
-                    >
-                      <option value="">Elegí un ítem...</option>
-                      {sortedItems.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.name}
-                          {it.project ? ` (${it.project})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={row.quantity_per_batch}
-                      onChange={(e) => updateRow(i, { quantity_per_batch: e.target.value })}
-                      className="w-24 rounded-md border border-neutral-300 px-2 py-2 text-sm"
-                      placeholder="0"
-                    />
-                    <span className="text-xs text-neutral-400 w-8">
-                      {selected ? UNIT_LABELS[selected.unit] : ""}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(i)}
-                      className="text-neutral-400 hover:text-red-600 text-sm px-1"
-                    >
-                      ✕
-                    </button>
+                  <div key={i}>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={row.item_id}
+                        onChange={(e) => selectRowItem(i, e.target.value)}
+                        className="flex-1 rounded-md border border-neutral-300 px-2 py-2 text-sm"
+                      >
+                        <option value="">Elegí un ítem...</option>
+                        {sortedItems.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name}
+                            {it.project ? ` (${it.project})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={row.quantity_per_batch}
+                        onChange={(e) => updateRow(i, { quantity_per_batch: e.target.value })}
+                        className="w-20 rounded-md border border-neutral-300 px-2 py-2 text-sm"
+                        placeholder="0"
+                      />
+                      {unitOptions.length > 1 ? (
+                        <select
+                          value={entryUnit ?? selected!.unit}
+                          onChange={(e) => updateRow(i, { entryUnit: e.target.value as EntryUnit })}
+                          className="w-16 rounded-md border border-neutral-300 px-1 py-2 text-sm"
+                        >
+                          {unitOptions.map((u) => (
+                            <option key={u} value={u}>
+                              {UNIT_LABELS[u]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-neutral-400 w-8">
+                          {selected ? UNIT_LABELS[selected.unit] : ""}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        className="text-neutral-400 hover:text-red-600 text-sm px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {selected && entryUnit && entryUnit !== selected.unit && rawQty > 0 && (
+                      <p className="text-xs text-neutral-400 mt-0.5 ml-1">
+                        = {convertedQty.toLocaleString("es-MX", { maximumFractionDigits: 6 })}{" "}
+                        {UNIT_LABELS[selected.unit]} por lote
+                      </p>
+                    )}
                   </div>
                 );
               })}

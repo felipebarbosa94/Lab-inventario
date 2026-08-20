@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORY_LABELS, CATEGORY_OPTIONS } from "@/lib/categories";
+import { CATEGORY_LABELS, CATEGORY_OPTIONS, UNIT_LABELS } from "@/lib/categories";
 import { supabase } from "@/lib/supabase";
 import { Item, Unit } from "@/lib/types";
 import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
+import { convertQuantity } from "@/lib/units";
 
 export default function EditItemModal({
   item,
@@ -30,6 +31,11 @@ export default function EditItemModal({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function handleUnitChange(newUnit: Unit) {
+    setQuantity(String(convertQuantity(Number(quantity) || 0, unit, newUnit)));
+    setUnit(newUnit);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -140,7 +146,7 @@ export default function EditItemModal({
               <label className="block text-sm font-medium text-neutral-700 mb-1">Unidad</label>
               <select
                 value={unit}
-                onChange={(e) => setUnit(e.target.value as Unit)}
+                onChange={(e) => handleUnitChange(e.target.value as Unit)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
               >
                 <option value="unidad">unidad</option>
@@ -159,6 +165,7 @@ export default function EditItemModal({
                 onChange={(e) => setQuantity(e.target.value)}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
               />
+              <p className="text-xs text-neutral-400 mt-1">en {UNIT_LABELS[unit]}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">

@@ -13,5 +13,6 @@ export const CATEGORY_OPTIONS = Object.keys(CATEGORY_LABELS);
 export const UNIT_LABELS: Record<string, string> = {
   kg: "kg",
   g: "g",
+  mg: "mg",
   unidad: "u",
 };

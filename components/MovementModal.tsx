@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Item, MovementType } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
+import { convertQuantity, entryUnitOptions, EntryUnit } from "@/lib/units";
 import { supabase } from "@/lib/supabase";
 
 export default function MovementModal({
@@ -17,20 +18,23 @@ export default function MovementModal({
   onClose: () => void;
 }) {
   const [quantity, setQuantity] = useState("");
+  const [entryUnit, setEntryUnit] = useState<EntryUnit>(item.unit);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const label = type === "entrada" ? "Agregar" : "Quitar";
+  const unitOptions = entryUnitOptions(item.unit);
+  const rawQty = Number(quantity) || 0;
+  const qtyInItemUnit = convertQuantity(rawQty, entryUnit, item.unit);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const qty = Number(quantity);
-    if (!qty || qty <= 0) {
+    if (!rawQty || rawQty <= 0) {
       setError("Ingresá una cantidad válida");
       return;
     }
-    if (type === "salida" && qty > item.quantity) {
+    if (type === "salida" && qtyInItemUnit > item.quantity) {
       setError(
         `Solo quedan ${item.quantity} ${UNIT_LABELS[item.unit]} — no podés quitar más de eso.`
       );
@@ -42,7 +46,7 @@ export default function MovementModal({
       item_id: item.id,
       user_name: workerName,
       type,
-      quantity: qty,
+      quantity: qtyInItemUnit,
       note: note.trim() || null,
     });
     setSaving(false);
@@ -64,21 +68,48 @@ export default function MovementModal({
         </p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">
-              Cantidad ({UNIT_LABELS[item.unit]})
-            </label>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max={type === "salida" ? item.quantity : undefined}
-              step="any"
-              autoFocus
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-lg"
-              placeholder="0"
-            />
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Cantidad</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                autoFocus
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-lg"
+                placeholder="0"
+              />
+              {unitOptions.length > 1 ? (
+                <select
+                  value={entryUnit}
+                  onChange={(e) => setEntryUnit(e.target.value as EntryUnit)}
+                  className="rounded-md border border-neutral-300 px-2 text-lg"
+                >
+                  {unitOptions.map((u) => (
+                    <option key={u} value={u}>
+                      {UNIT_LABELS[u]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="flex items-center px-2 text-neutral-500">
+                  {UNIT_LABELS[item.unit]}
+                </span>
+              )}
+            </div>
+            {entryUnit !== item.unit && rawQty > 0 && (
+              <p className="text-xs text-neutral-500 mt-1">
+                = {qtyInItemUnit.toLocaleString("es-MX", { maximumFractionDigits: 6 })}{" "}
+                {UNIT_LABELS[item.unit]}
+              </p>
+            )}
+            {type === "salida" && qtyInItemUnit > item.quantity && rawQty > 0 && (
+              <p className="text-xs text-red-600 mt-1">
+                Solo quedan {item.quantity} {UNIT_LABELS[item.unit]}.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">
