@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { CATEGORY_LABELS, UNIT_LABELS } from "@/lib/categories";
-import { MovementType } from "@/lib/types";
+import { CATEGORY_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
+import { MovementType, Unit } from "@/lib/types";
 
 interface MonthMovement {
   id: string;
@@ -13,7 +14,7 @@ interface MonthMovement {
   quantity: number;
   note: string | null;
   created_at: string;
-  items: { name: string; category: string; project: string | null; unit: string } | null;
+  items: { name: string; category: string; project: string | null; unit: Unit } | null;
 }
 
 function currentMonthValue() {
@@ -57,7 +58,7 @@ export default function MonthlySummaryPanel({ onClose }: { onClose: () => void }
     const entradas = monthMovements.filter((m) => m.type === "entrada");
     const salidas = monthMovements.filter((m) => m.type === "salida");
 
-    const byItemUsed: Record<string, { name: string; unit: string; total: number }> = {};
+    const byItemUsed: Record<string, { name: string; unit: Unit; total: number }> = {};
     for (const m of salidas) {
       if (!m.items) continue;
       const key = m.item_id;
@@ -182,7 +183,7 @@ export default function MonthlySummaryPanel({ onClose }: { onClose: () => void }
                       <li key={u.name} className="flex justify-between text-sm">
                         <span className="text-neutral-600 truncate mr-2">{u.name}</span>
                         <span className="font-medium text-neutral-900 shrink-0">
-                          {u.total.toLocaleString("es-MX")} {UNIT_LABELS[u.unit] ?? u.unit}
+                          {formatQuantity(u.total, u.unit)}
                         </span>
                       </li>
                     ))}
@@ -266,7 +267,7 @@ export default function MonthlySummaryPanel({ onClose }: { onClose: () => void }
                       >
                         {m.type === "entrada" ? "agregó" : m.type === "salida" ? "quitó" : "ajustó"}
                       </span>{" "}
-                      {m.quantity} {m.items ? UNIT_LABELS[m.items.unit] ?? m.items.unit : ""} de{" "}
+                      {m.items ? formatQuantity(m.quantity, m.items.unit) : m.quantity} de{" "}
                       {m.items?.name ?? "ítem eliminado"}
                     </p>
                   </li>

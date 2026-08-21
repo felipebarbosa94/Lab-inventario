@@ -4,7 +4,10 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
-import { convertQuantity, entryUnitOptions, EntryUnit } from "@/lib/units";
+import { convertQuantity, entryUnitOptions, EntryUnit, roundQty } from "@/lib/units";
+import { syncItemHeadlineLot } from "@/lib/lots";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 interface Row {
   item_id: string;
@@ -17,19 +20,31 @@ interface Row {
 export default function ReceiveShipmentModal({
   items,
   workerName,
+  preselectItemId,
   onClose,
 }: {
   items: Item[];
   workerName: string;
+  preselectItemId?: string;
   onClose: () => void;
 }) {
   const materiaPrima = items
     .filter((i) => i.category === "materia_prima")
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const preselected = preselectItemId
+    ? materiaPrima.find((i) => i.id === preselectItemId)
+    : undefined;
+
   const [proveedor, setProveedor] = useState("");
   const [rows, setRows] = useState<Row[]>([
-    { item_id: "", quantity: "", entryUnit: null, lote: "", caducidad: "" },
+    {
+      item_id: preselected?.id ?? "",
+      quantity: "",
+      entryUnit: preselected?.unit ?? null,
+      lote: "",
+      caducidad: "",
+    },
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,42 +81,50 @@ export default function ReceiveShipmentModal({
 
     const proveedorTrimmed = proveedor.trim() || null;
 
-    const { error: insertError } = await supabase.from("movements").insert(
-      validRows.map((r) => {
+    try {
+      for (const r of validRows) {
         const item = materiaPrima.find((it) => it.id === r.item_id);
-        const qty = item
-          ? convertQuantity(Number(r.quantity), r.entryUnit ?? item.unit, item.unit)
-          : Number(r.quantity);
-        return {
+        if (!item) continue;
+        const qty = roundQty(convertQuantity(Number(r.quantity), r.entryUnit ?? item.unit, item.unit));
+        const loteTrimmed = r.lote.trim() || null;
+        const caducidadValue = r.caducidad || null;
+
+        // Cada recepción crea su propio lote — así un mismo ítem puede
+        // tener varios lotes vigentes a la vez, cada uno con su fecha,
+        // sin sobreescribir los que ya estaban.
+        const { data: newLot, error: lotError } = await supabase
+          .from("item_lots")
+          .insert({
+            item_id: r.item_id,
+            lote: loteTrimmed,
+            caducidad: caducidadValue,
+            proveedor: proveedorTrimmed,
+            quantity: qty,
+          })
+          .select()
+          .single();
+        if (lotError || !newLot) throw new Error(lotError?.message ?? "No se pudo crear el lote");
+
+        const { error: movError } = await supabase.from("movements").insert({
           item_id: r.item_id,
           user_name: workerName,
           type: "entrada",
           quantity: qty,
           note: "Recepción de mercancía",
-          lote: r.lote.trim() || null,
-          caducidad: r.caducidad || null,
+          lot_id: newLot.id,
+          lote: loteTrimmed,
+          caducidad: caducidadValue,
           proveedor: proveedorTrimmed,
-        };
-      })
-    );
-    if (insertError) {
+        });
+        if (movError) throw new Error(movError.message);
+
+        await syncItemHeadlineLot(supabase, r.item_id);
+      }
+    } catch (err) {
       setSaving(false);
-      setError(insertError.message);
+      setError(err instanceof Error ? err.message : "Error al registrar la recepción");
       return;
     }
-
-    await Promise.all(
-      validRows.map((r) =>
-        supabase
-          .from("items")
-          .update({
-            lote: r.lote.trim() || null,
-            caducidad: r.caducidad || null,
-            proveedor: proveedorTrimmed,
-          })
-          .eq("id", r.item_id)
-      )
-    );
 
     setSaving(false);
     onClose();
@@ -155,11 +178,10 @@ export default function ReceiveShipmentModal({
                         ))}
                       </select>
                       <input
-                        type="number"
-                        min="0"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
                         value={row.quantity}
-                        onChange={(e) => updateRow(i, { quantity: e.target.value })}
+                        onChange={(e) => updateRow(i, { quantity: sanitizeDecimalInput(e.target.value) })}
                         className="w-20 rounded-md border border-neutral-300 px-2 py-2 text-sm"
                         placeholder="0"
                       />
@@ -190,8 +212,7 @@ export default function ReceiveShipmentModal({
                     </div>
                     {selected && row.entryUnit && row.entryUnit !== selected.unit && rawQty > 0 && (
                       <p className="text-xs text-neutral-400 -mt-1">
-                        = {convertedQty.toLocaleString("es-MX", { maximumFractionDigits: 6 })}{" "}
-                        {UNIT_LABELS[selected.unit]}
+                        = {formatQuantity(convertedQty, selected.unit)}
                       </p>
                     )}
                     <div className="flex gap-2">

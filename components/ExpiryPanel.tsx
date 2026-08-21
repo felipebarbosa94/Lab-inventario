@@ -1,16 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { Item } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { exportExpiryReport } from "@/lib/expiryReport";
+import { formatQuantity } from "@/lib/formatQuantity";
+import { Unit } from "@/lib/types";
 
-export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose: () => void }) {
+interface RawLotRow {
+  id: string;
+  lote: string | null;
+  caducidad: string;
+  quantity: number;
+  items: { name: string; unit: Unit } | null;
+}
+
+interface ExpiringLotRow {
+  id: string;
+  lote: string | null;
+  caducidad: string;
+  quantity: number;
+  itemName: string;
+  unit: Unit;
+}
+
+export default function ExpiryPanel({ onClose }: { onClose: () => void }) {
   const [now] = useState(() => Date.now());
+  const [rows, setRows] = useState<ExpiringLotRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const rows = items
-    .filter((i): i is Item & { caducidad: string } => Boolean(i.caducidad))
-    .sort((a, b) => new Date(a.caducidad!).getTime() - new Date(b.caducidad!).getTime());
+  useEffect(() => {
+    supabase
+      .from("item_lots")
+      .select("id, lote, caducidad, quantity, items(name, unit)")
+      .not("caducidad", "is", null)
+      .gt("quantity", 0)
+      .order("caducidad", { ascending: true })
+      .then(({ data }) => {
+        const mapped = ((data as unknown as RawLotRow[]) ?? []).map((r) => ({
+          id: r.id,
+          lote: r.lote,
+          caducidad: r.caducidad,
+          quantity: r.quantity,
+          itemName: r.items?.name ?? "Ítem eliminado",
+          unit: r.items?.unit ?? "unidad",
+        }));
+        setRows(mapped);
+        setLoading(false);
+      });
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -22,16 +59,18 @@ export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose
           </button>
         </div>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-neutral-500">Ordenado por fecha más próxima primero.</p>
+          <p className="text-sm text-neutral-500">
+            Cada lote por separado, ordenado por fecha más próxima primero.
+          </p>
           <button
             onClick={() =>
               exportExpiryReport(
                 rows.map((r) => ({
-                  name: r.name,
+                  name: r.itemName,
                   lote: r.lote,
-                  caducidad: r.caducidad!,
+                  caducidad: r.caducidad,
                   quantity: r.quantity,
-                  unit: UNIT_LABELS[r.unit],
+                  unit: r.unit,
                 }))
               )
             }
@@ -42,21 +81,22 @@ export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose
         </div>
 
         <div className="overflow-y-auto flex-1 -mx-5 px-5">
-          {rows.length === 0 && (
+          {loading && <p className="text-sm text-neutral-400 py-8 text-center">Cargando...</p>}
+          {!loading && rows.length === 0 && (
             <p className="text-sm text-neutral-400 py-8 text-center">
-              Ningún ítem tiene caducidad registrada todavía.
+              Ningún lote tiene caducidad registrada todavía.
             </p>
           )}
           <div className="space-y-2">
-            {rows.map((item) => {
+            {rows.map((row) => {
               const days = Math.ceil(
-                (new Date(item.caducidad).getTime() - now) / (1000 * 60 * 60 * 24)
+                (new Date(row.caducidad).getTime() - now) / (1000 * 60 * 60 * 24)
               );
               const expired = days < 0;
               const soon = !expired && days <= 15;
               return (
                 <div
-                  key={item.id}
+                  key={row.id}
                   className={`rounded-lg border px-3 py-2 ${
                     expired
                       ? "border-red-300 bg-red-50"
@@ -67,14 +107,15 @@ export default function ExpiryPanel({ items, onClose }: { items: Item[]; onClose
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <p className="font-medium text-neutral-900">{item.name}</p>
+                      <p className="font-medium text-neutral-900">{row.itemName}</p>
                       <p className="text-xs text-neutral-500">
-                        {(item.lote && `lote ${item.lote}`) || "—"}
+                        {(row.lote && `lote ${row.lote}`) || "—"} ·{" "}
+                        {formatQuantity(row.quantity, row.unit)}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-medium text-neutral-900">
-                        {new Date(item.caducidad).toLocaleDateString("es-MX")}
+                        {new Date(row.caducidad).toLocaleDateString("es-MX")}
                       </p>
                       <p
                         className={`text-xs font-medium ${

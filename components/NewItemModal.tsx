@@ -5,6 +5,7 @@ import { CATEGORY_LABELS, CATEGORY_OPTIONS } from "@/lib/categories";
 import { supabase } from "@/lib/supabase";
 import { Unit } from "@/lib/types";
 import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
 
 export default function NewItemModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
@@ -29,23 +30,40 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
     }
     setSaving(true);
     setError(null);
-    const { error: insertError } = await supabase.from("items").insert({
-      name: name.trim(),
-      category,
-      project: project.trim() || null,
-      flavor: flavor.trim() || null,
-      unit,
-      quantity: Number(quantity) || 0,
-      low_stock_threshold: threshold ? Number(threshold) : null,
-      lote: lote.trim() || null,
-      caducidad: caducidad || null,
-      proveedor: proveedor.trim() || null,
-    });
-    setSaving(false);
-    if (insertError) {
-      setError(insertError.message);
+    const initialQuantity = Number(quantity) || 0;
+    const loteTrimmed = lote.trim() || null;
+    const proveedorTrimmed = proveedor.trim() || null;
+    const { data: newItem, error: insertError } = await supabase
+      .from("items")
+      .insert({
+        name: name.trim(),
+        category,
+        project: project.trim() || null,
+        flavor: flavor.trim() || null,
+        unit,
+        quantity: initialQuantity,
+        low_stock_threshold: threshold ? Number(threshold) : null,
+        lote: loteTrimmed,
+        caducidad: caducidad || null,
+        proveedor: proveedorTrimmed,
+      })
+      .select()
+      .single();
+    if (insertError || !newItem) {
+      setSaving(false);
+      setError(insertError?.message ?? "No se pudo crear el ítem");
       return;
     }
+    if (initialQuantity > 0 || loteTrimmed || caducidad) {
+      await supabase.from("item_lots").insert({
+        item_id: newItem.id,
+        lote: loteTrimmed,
+        caducidad: caducidad || null,
+        proveedor: proveedorTrimmed,
+        quantity: initialQuantity,
+      });
+    }
+    setSaving(false);
     onClose();
   }
 
@@ -126,10 +144,10 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
                 Stock inicial
               </label>
               <input
-                type="number"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
                 placeholder="0"
               />
@@ -139,10 +157,10 @@ export default function NewItemModal({ onClose }: { onClose: () => void }) {
                 Alerta si ≤
               </label>
               <input
-                type="number"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
+                onChange={(e) => setThreshold(sanitizeDecimalInput(e.target.value))}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
                 placeholder="opcional"
               />

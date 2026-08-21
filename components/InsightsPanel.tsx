@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
 import { computeStockoutCounts } from "@/lib/stockouts";
+import { computeReorderPredictions, REORDER_WINDOW_DAYS } from "@/lib/reorderPrediction";
 
-const WINDOW_DAYS = 60;
+const WINDOW_DAYS = REORDER_WINDOW_DAYS;
 
 interface Insight {
   item: Item;
@@ -35,32 +36,29 @@ export default function InsightsPanel({
   const [stockouts, setStockouts] = useState<StockoutRow[] | null>(null);
 
   useEffect(() => {
-    const since = new Date();
-    since.setDate(since.getDate() - WINDOW_DAYS);
-
-    supabase
-      .from("movements")
-      .select("item_id, quantity")
-      .eq("type", "salida")
-      .gte("created_at", since.toISOString())
-      .then(({ data }) => {
-        const totals: Record<string, number> = {};
-        for (const m of data ?? []) {
-          totals[m.item_id] = (totals[m.item_id] ?? 0) + Number(m.quantity);
-        }
-        const computed = items
-          .filter((item) => totals[item.id] > 0)
-          .map((item) => {
-            const totalUsed = totals[item.id];
-            const dailyRate = totalUsed / WINDOW_DAYS;
-            const daysRemaining = dailyRate > 0 ? item.quantity / dailyRate : null;
-            const suggestedThreshold = Math.max(1, Math.ceil(dailyRate * 7));
-            return { item, totalUsed, dailyRate, daysRemaining, suggestedThreshold };
-          })
-          .sort((a, b) => (a.daysRemaining ?? Infinity) - (b.daysRemaining ?? Infinity));
-        setInsights(computed);
-        setLoading(false);
-      });
+    computeReorderPredictions(
+      supabase,
+      items.map((i) => ({ id: i.id, quantity: i.quantity })),
+      WINDOW_DAYS
+    ).then((predictions) => {
+      const computed = items
+        .filter((item) => predictions.has(item.id))
+        .map((item) => {
+          const { dailyRate, daysRemaining } = predictions.get(item.id)!;
+          const totalUsed = dailyRate * WINDOW_DAYS;
+          const weeklyRate = dailyRate * 7;
+          // Para piezas ("unidad") no tiene sentido sugerir menos de 1 —
+          // pero para kg/g, redondear hacia arriba a un entero exagera
+          // muchísimo el umbral cuando el consumo real es en miligramos
+          // (ej. 0.0007 kg/semana no debería sugerir "1 kg").
+          const suggestedThreshold =
+            item.unit === "unidad" ? Math.max(1, Math.ceil(weeklyRate)) : Number(weeklyRate.toFixed(6));
+          return { item, totalUsed, dailyRate, daysRemaining, suggestedThreshold };
+        })
+        .sort((a, b) => (a.daysRemaining ?? Infinity) - (b.daysRemaining ?? Infinity));
+      setInsights(computed);
+      setLoading(false);
+    });
   }, [items]);
 
   useEffect(() => {
@@ -137,7 +135,6 @@ export default function InsightsPanel({
           )}
           <div className="space-y-2">
             {insights.map((ins) => {
-              const unit = UNIT_LABELS[ins.item.unit];
               const urgent = ins.daysRemaining !== null && ins.daysRemaining <= 14;
               return (
                 <div
@@ -150,8 +147,8 @@ export default function InsightsPanel({
                     <div>
                       <p className="font-medium text-neutral-900">{ins.item.name}</p>
                       <p className="text-xs text-neutral-500">
-                        Usás ~{ins.dailyRate.toFixed(2)} {unit}/día · quedan {ins.item.quantity}{" "}
-                        {unit}
+                        Usás ~{formatQuantity(ins.dailyRate, ins.item.unit)}/día · quedan{" "}
+                        {formatQuantity(ins.item.quantity, ins.item.unit)}
                         {ins.daysRemaining !== null && (
                           <>
                             {" "}
@@ -166,8 +163,12 @@ export default function InsightsPanel({
                   </div>
                   <div className="flex items-center justify-between mt-2 text-xs text-neutral-500">
                     <span>
-                      Umbral actual: {ins.item.low_stock_threshold ?? "sin definir"} {unit} —
-                      sugerido: {ins.suggestedThreshold} {unit} (1 semana de uso)
+                      Umbral actual:{" "}
+                      {ins.item.low_stock_threshold !== null
+                        ? formatQuantity(ins.item.low_stock_threshold, ins.item.unit)
+                        : "sin definir"}{" "}
+                      — sugerido: {formatQuantity(ins.suggestedThreshold, ins.item.unit)} (1 semana
+                      de uso)
                     </span>
                     <button
                       onClick={() => applyThreshold(ins)}

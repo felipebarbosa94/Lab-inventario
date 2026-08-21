@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
 import { Item, MovementWithItem, MovementType } from "@/lib/types";
 import KpiAlerts from "./KpiAlerts";
+import ReorderAlerts from "./ReorderAlerts";
 import SummaryStrip from "./SummaryStrip";
 import InventoryGrid from "./InventoryGrid";
 import MovementFeed from "./MovementFeed";
@@ -18,6 +19,7 @@ import MonthlySummaryPanel from "./MonthlySummaryPanel";
 import FinancePanel from "./FinancePanel";
 import ReceiveShipmentModal from "./ReceiveShipmentModal";
 import ExpiryPanel from "./ExpiryPanel";
+import ItemLotsModal from "./ItemLotsModal";
 import TodayPanel from "./TodayPanel";
 import HelpPanel from "./HelpPanel";
 import ProjectsPanel from "./ProjectsPanel";
@@ -27,6 +29,7 @@ import { useWorkerName } from "@/lib/useWorkerName";
 import { useSimpleMode } from "@/lib/useSimpleMode";
 import { exportItemsToCsv } from "@/lib/exportCsv";
 import { exportFullBackup } from "@/lib/backup";
+import { computeReorderPredictions, ReorderPrediction } from "@/lib/reorderPrediction";
 
 export default function InventoryDashboard() {
   const { name, saveName, clearName } = useWorkerName();
@@ -38,6 +41,8 @@ export default function InventoryDashboard() {
   const [showNewItem, setShowNewItem] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
+  const [lotsItem, setLotsItem] = useState<Item | null>(null);
+  const [receivePreselectId, setReceivePreselectId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [showRecipes, setShowRecipes] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
@@ -53,6 +58,7 @@ export default function InventoryDashboard() {
   const [showProjects, setShowProjects] = useState(false);
   const [showClients, setShowClients] = useState(false);
   const [mostUsedIds, setMostUsedIds] = useState<string[]>([]);
+  const [predictions, setPredictions] = useState<Map<string, ReorderPrediction>>(new Map());
 
   async function handleBackup() {
     setBackingUp(true);
@@ -85,9 +91,24 @@ export default function InventoryDashboard() {
       .channel("inventario-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "items" }, (payload) => {
         setItems((prev) => {
-          if (payload.eventType === "INSERT") return [...prev, payload.new as Item];
-          if (payload.eventType === "UPDATE")
-            return prev.map((i) => (i.id === payload.new.id ? (payload.new as Item) : i));
+          // Realtime manda las columnas numéricas de Postgres como texto
+          // (para no perder precisión), no como number — sin esto, en
+          // cuanto llegara una actualización en vivo desde otro
+          // dispositivo, las comparaciones de cantidad se romperían hasta
+          // recargar la página.
+          const raw = payload.new as Record<string, unknown> | undefined;
+          const normalized =
+            raw && Object.keys(raw).length > 0
+              ? ({
+                  ...raw,
+                  quantity: Number(raw.quantity),
+                  low_stock_threshold:
+                    raw.low_stock_threshold === null ? null : Number(raw.low_stock_threshold),
+                } as unknown as Item)
+              : null;
+          if (payload.eventType === "INSERT" && normalized) return [...prev, normalized];
+          if (payload.eventType === "UPDATE" && normalized)
+            return prev.map((i) => (i.id === normalized.id ? normalized : i));
           if (payload.eventType === "DELETE")
             return prev.filter((i) => i.id !== payload.old.id);
           return prev;
@@ -133,6 +154,14 @@ export default function InventoryDashboard() {
         setMostUsedIds(sorted);
       });
   }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured || items.length === 0) return;
+    computeReorderPredictions(
+      supabase,
+      items.map((i) => ({ id: i.id, quantity: i.quantity }))
+    ).then(setPredictions);
+  }, [items]);
 
   if (!supabaseConfigured) {
     return (
@@ -336,17 +365,20 @@ export default function InventoryDashboard() {
             </div>
           )}
           <KpiAlerts items={sectionItems} />
+          <ReorderAlerts items={sectionItems} />
           {!simpleMode && <SummaryStrip items={sectionItems} />}
           <div className={simpleMode ? "" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
             <div className={simpleMode ? "" : "lg:col-span-2"}>
               <InventoryGrid
                 items={sectionItems}
                 mostUsedIds={mostUsedIds}
+                predictions={predictions}
                 simpleMode={simpleMode}
                 onQuitar={(item) => setModal({ item, type: "salida" })}
                 onAgregar={(item) => setModal({ item, type: "entrada" })}
                 onEditar={(item) => setEditItem(item)}
                 onHistorial={(item) => setHistoryItem(item)}
+                onLotes={(item) => setLotsItem(item)}
               />
             </div>
             {!simpleMode && (
@@ -371,6 +403,15 @@ export default function InventoryDashboard() {
         <EditItemModal
           item={items.find((i) => i.id === editItem.id) ?? editItem}
           onClose={() => setEditItem(null)}
+          onOpenReceive={() => {
+            setShowReceive(true);
+            setReceivePreselectId(editItem.id);
+            setEditItem(null);
+          }}
+          onOpenLotes={() => {
+            setLotsItem(editItem);
+            setEditItem(null);
+          }}
         />
       )}
       {historyItem && (
@@ -390,10 +431,21 @@ export default function InventoryDashboard() {
         <ReceiveShipmentModal
           items={items}
           workerName={name}
-          onClose={() => setShowReceive(false)}
+          preselectItemId={receivePreselectId ?? undefined}
+          onClose={() => {
+            setShowReceive(false);
+            setReceivePreselectId(null);
+          }}
         />
       )}
-      {showExpiry && <ExpiryPanel items={items} onClose={() => setShowExpiry(false)} />}
+      {showExpiry && <ExpiryPanel onClose={() => setShowExpiry(false)} />}
+      {lotsItem && (
+        <ItemLotsModal
+          item={items.find((i) => i.id === lotsItem.id) ?? lotsItem}
+          workerName={name}
+          onClose={() => setLotsItem(null)}
+        />
+      )}
       {showToday && <TodayPanel workerName={name} onClose={() => setShowToday(false)} />}
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
       {showProjects && <ProjectsPanel onClose={() => setShowProjects(false)} />}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item, Movement } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("es-MX", {
@@ -84,7 +84,7 @@ export default function ItemHistoryModal({
           </button>
         </div>
         <p className="text-sm text-neutral-500 mb-4">
-          Stock actual: {item.quantity} {UNIT_LABELS[item.unit]}
+          Stock actual: {formatQuantity(item.quantity, item.unit)}
         </p>
         {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
         <div className="overflow-y-auto flex-1 -mx-5 px-5">
@@ -111,7 +111,7 @@ export default function ItemHistoryModal({
                   >
                     {m.type === "entrada" ? "agregó" : m.type === "salida" ? "quitó" : "ajustó a"}
                   </span>{" "}
-                  {m.quantity} {UNIT_LABELS[item.unit]}
+                  {formatQuantity(m.quantity, item.unit)}
                 </p>
                 {m.note && <p className="text-xs text-neutral-400 mt-0.5">{m.note}</p>}
 

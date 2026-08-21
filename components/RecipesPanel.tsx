@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Item, RecipeWithItems } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
+import { normalizeSearch } from "@/lib/normalizeSearch";
 import RecipeFormModal from "./RecipeFormModal";
 import ProduceModal from "./ProduceModal";
 
@@ -59,8 +60,8 @@ export default function RecipesPanel({
   const filteredRecipes = recipes.filter((r) => {
     if (projectFilter && r.project !== projectFilter) return false;
     if (search.trim()) {
-      const haystack = [r.name, r.project].filter(Boolean).join(" ").toLowerCase();
-      if (!haystack.includes(search.trim().toLowerCase())) return false;
+      const haystack = normalizeSearch([r.name, r.project].filter(Boolean).join(" "));
+      if (!haystack.includes(normalizeSearch(search.trim()))) return false;
     }
     return true;
   });
@@ -162,7 +163,10 @@ export default function RecipesPanel({
                 <ul className="text-xs text-neutral-500 mt-2 space-y-0.5">
                   {r.recipe_items.map((ri) => (
                     <li key={ri.id}>
-                      {ri.quantity_per_batch} {ri.items ? UNIT_LABELS[ri.items.unit] : ""} de{" "}
+                      {ri.items
+                        ? formatQuantity(ri.quantity_per_batch, ri.items.unit)
+                        : ri.quantity_per_batch}{" "}
+                      de{" "}
                       {ri.items?.name ?? "ítem eliminado"}
                     </li>
                   ))}

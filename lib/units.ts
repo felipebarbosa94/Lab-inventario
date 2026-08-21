@@ -30,3 +30,12 @@ export function entryUnitOptions(baseUnit: Unit): EntryUnit[] {
   if (baseUnit === "g") return ["g", "mg", "kg"];
   return [baseUnit];
 }
+
+// Redondea a 6 decimales — suficiente precisión para pesar hasta el
+// miligramo aunque el ítem esté en kg — para que el punto flotante de JS no
+// vaya dejando residuos (ej. 0.1 + 0.2 = 0.30000000000000004) que después
+// de miles de movimientos dejarían lotes "fantasma" con cantidades
+// casi-cero en vez de exactamente cero.
+export function roundQty(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}

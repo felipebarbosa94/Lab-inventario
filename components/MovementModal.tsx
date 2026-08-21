@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Item, MovementType } from "@/lib/types";
+import { Item, ItemLot, MovementType } from "@/lib/types";
 import { UNIT_LABELS } from "@/lib/categories";
-import { convertQuantity, entryUnitOptions, EntryUnit } from "@/lib/units";
+import { convertQuantity, entryUnitOptions, EntryUnit, roundQty } from "@/lib/units";
+import { allocateFefo, getOrCreateDefaultLot, syncItemHeadlineLot } from "@/lib/lots";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
+import { formatQuantity } from "@/lib/formatQuantity";
 import { supabase } from "@/lib/supabase";
 
 export default function MovementModal({
@@ -35,25 +38,75 @@ export default function MovementModal({
       return;
     }
     if (type === "salida" && qtyInItemUnit > item.quantity) {
-      setError(
-        `Solo quedan ${item.quantity} ${UNIT_LABELS[item.unit]} — no podés quitar más de eso.`
-      );
+      setError(`Solo quedan ${formatQuantity(item.quantity, item.unit)} — no podés quitar más de eso.`);
       return;
     }
     setSaving(true);
     setError(null);
-    const { error: insertError } = await supabase.from("movements").insert({
-      item_id: item.id,
-      user_name: workerName,
-      type,
-      quantity: qtyInItemUnit,
-      note: note.trim() || null,
-    });
-    setSaving(false);
-    if (insertError) {
-      setError(insertError.message);
-      return;
+
+    if (type === "salida") {
+      // Descuenta primero del lote más próximo a caducar (FEFO), y deja
+      // registrado en el historial exactamente de qué lote salió cada uno.
+      const { data: lots, error: lotsError } = await supabase
+        .from("item_lots")
+        .select("*")
+        .eq("item_id", item.id)
+        .gt("quantity", 0);
+      if (lotsError) {
+        setSaving(false);
+        setError(lotsError.message);
+        return;
+      }
+      const allocation = allocateFefo((lots ?? []) as ItemLot[], qtyInItemUnit);
+      const { error: insertError } = await supabase.from("movements").insert(
+        allocation.map((a) => ({
+          item_id: item.id,
+          user_name: workerName,
+          type: "salida",
+          quantity: a.take,
+          note: note.trim() || null,
+          lot_id: a.lot.id || null,
+          lote: a.lot.lote,
+          caducidad: a.lot.caducidad,
+          proveedor: a.lot.proveedor,
+        }))
+      );
+      if (insertError) {
+        setSaving(false);
+        setError(insertError.message);
+        return;
+      }
+      await Promise.all(
+        allocation.map((a) =>
+          supabase.rpc("adjust_lot_quantity", { p_lot_id: a.lot.id, p_delta: -roundQty(a.take) })
+        )
+      );
+      await syncItemHeadlineLot(supabase, item.id);
+    } else {
+      const defaultLot = await getOrCreateDefaultLot(supabase, item.id);
+      const { error: insertError } = await supabase.from("movements").insert({
+        item_id: item.id,
+        user_name: workerName,
+        type: "entrada",
+        quantity: qtyInItemUnit,
+        note: note.trim() || null,
+        lot_id: defaultLot.id,
+        lote: null,
+        caducidad: null,
+        proveedor: null,
+      });
+      if (insertError) {
+        setSaving(false);
+        setError(insertError.message);
+        return;
+      }
+      await supabase.rpc("adjust_lot_quantity", {
+        p_lot_id: defaultLot.id,
+        p_delta: roundQty(qtyInItemUnit),
+      });
     }
+
+    setSaving(false);
     onClose();
   }
 
@@ -64,20 +117,18 @@ export default function MovementModal({
           {label} — {item.name}
         </h3>
         <p className="text-sm text-neutral-500 mb-4">
-          Stock actual: {item.quantity} {UNIT_LABELS[item.unit]}
+          Stock actual: {formatQuantity(item.quantity, item.unit)}
         </p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">Cantidad</label>
             <div className="flex gap-2">
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0"
-                step="any"
                 autoFocus
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))}
                 className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-lg"
                 placeholder="0"
               />
@@ -101,14 +152,21 @@ export default function MovementModal({
             </div>
             {entryUnit !== item.unit && rawQty > 0 && (
               <p className="text-xs text-neutral-500 mt-1">
-                = {qtyInItemUnit.toLocaleString("es-MX", { maximumFractionDigits: 6 })}{" "}
-                {UNIT_LABELS[item.unit]}
+                = {formatQuantity(qtyInItemUnit, item.unit)}
               </p>
             )}
             {type === "salida" && qtyInItemUnit > item.quantity && rawQty > 0 && (
-              <p className="text-xs text-red-600 mt-1">
-                Solo quedan {item.quantity} {UNIT_LABELS[item.unit]}.
-              </p>
+              <div className="mt-1">
+                <p className="text-xs text-red-600">
+                  Solo quedan {formatQuantity(item.quantity, item.unit)}.
+                </p>
+                {entryUnit === item.unit && unitOptions.length > 1 && (
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">
+                    ¿Quisiste decir {unitOptions.filter((u) => u !== item.unit).join(" o ")}? Cambia
+                    la unidad junto al número — arriba dice &quot;{UNIT_LABELS[item.unit]}&quot;.
+                  </p>
+                )}
+              </div>
             )}
           </div>
           <div>

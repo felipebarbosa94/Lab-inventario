@@ -1,9 +1,10 @@
-import { RecipeWithItems } from "./types";
+import { RecipeWithItems, Unit } from "./types";
+import { formatQuantity } from "./formatQuantity";
 
 interface OrderRow {
   name: string;
   needed: number;
-  unit: string;
+  unit: Unit;
   short: boolean;
   available: number;
 }
@@ -25,9 +26,10 @@ export function openProductionOrder(
       (r) => `
       <tr style="${r.short ? "color:#b91c1c;" : ""}">
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.name}</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5; text-align:right;">${r.needed.toLocaleString(
-          "es-MX"
-        )} ${r.unit}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5; text-align:right;">${formatQuantity(
+          r.needed,
+          r.unit
+        )}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">&#9744;</td>
       </tr>`
     )

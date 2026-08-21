@@ -2,24 +2,39 @@
 
 import { useState } from "react";
 import { Item } from "@/lib/types";
-import { CATEGORY_LABELS, UNIT_LABELS } from "@/lib/categories";
+import { CATEGORY_LABELS } from "@/lib/categories";
+import { ReorderPrediction, SemaphoreInfo, getStockSemaphore } from "@/lib/reorderPrediction";
+import { normalizeSearch } from "@/lib/normalizeSearch";
+import { formatQuantity } from "@/lib/formatQuantity";
+
+const SEMAPHORE_DOT_CLASS: Record<SemaphoreInfo["color"], string> = {
+  red: "bg-red-500",
+  amber: "bg-amber-500",
+  green: "bg-emerald-500",
+};
 
 function ItemCard({
   item,
   simple,
+  semaphore,
+  highUsage,
   onQuitar,
   onAgregar,
   onEditar,
   onHistorial,
+  onLotes,
 }: {
   item: Item;
   simple?: boolean;
+  semaphore: SemaphoreInfo | null;
+  highUsage?: boolean;
   onQuitar: (item: Item) => void;
   onAgregar: (item: Item) => void;
   onEditar: (item: Item) => void;
   onHistorial: (item: Item) => void;
+  onLotes: (item: Item) => void;
 }) {
-  const low = item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold;
+  const low = semaphore?.color === "red";
 
   const [now] = useState(() => Date.now());
   const daysToExpire = item.caducidad
@@ -35,7 +50,20 @@ function ItemCard({
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className={`font-medium text-neutral-900 ${simple ? "text-lg" : ""}`}>{item.name}</p>
+        <p className={`font-medium text-neutral-900 flex items-center gap-1.5 ${simple ? "text-lg" : ""}`}>
+          {semaphore && (
+            <span
+              title={semaphore.label}
+              className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${SEMAPHORE_DOT_CLASS[semaphore.color]}`}
+            />
+          )}
+          {item.name}
+          {highUsage && (
+            <span title="Se usa seguido" className="text-xs shrink-0">
+              🔥
+            </span>
+          )}
+        </p>
         {!simple && (
           <button
             onClick={() => onEditar(item)}
@@ -68,6 +96,14 @@ function ItemCard({
           )}
         </p>
       )}
+      {item.category === "materia_prima" && (
+        <button
+          onClick={() => onLotes(item)}
+          className="text-xs text-neutral-400 underline mt-0.5"
+        >
+          Lotes
+        </button>
+      )}
       <button
         onClick={() => onHistorial(item)}
         className={`font-bold mt-2 block text-left hover:underline ${
@@ -75,7 +111,7 @@ function ItemCard({
         } ${low ? "text-red-600" : "text-neutral-900"}`}
         title="Ver historial"
       >
-        {item.quantity} {UNIT_LABELS[item.unit]}
+        {formatQuantity(item.quantity, item.unit)}
       </button>
       <div className={`flex gap-2 mt-3 ${simple ? "gap-3" : ""}`}>
         <button
@@ -102,29 +138,33 @@ function ItemCard({
 export default function InventoryGrid({
   items,
   mostUsedIds,
+  predictions,
   simpleMode,
   onQuitar,
   onAgregar,
   onEditar,
   onHistorial,
+  onLotes,
 }: {
   items: Item[];
   mostUsedIds?: string[];
+  predictions?: Map<string, ReorderPrediction>;
   simpleMode?: boolean;
   onQuitar: (item: Item) => void;
   onAgregar: (item: Item) => void;
   onEditar: (item: Item) => void;
   onHistorial: (item: Item) => void;
+  onLotes: (item: Item) => void;
 }) {
   const [search, setSearch] = useState("");
+  const highUsageIds = new Set((mostUsedIds ?? []).slice(0, 6));
 
   const filtered = search.trim()
     ? items.filter((item) => {
-        const haystack = [item.name, item.project, item.flavor]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(search.trim().toLowerCase());
+        const haystack = normalizeSearch(
+          [item.name, item.project, item.flavor].filter(Boolean).join(" ")
+        );
+        return haystack.includes(normalizeSearch(search.trim()));
       })
     : items;
 
@@ -178,10 +218,13 @@ export default function InventoryGrid({
                 key={item.id}
                 item={item}
                 simple={simpleMode}
+                semaphore={getStockSemaphore(item, predictions?.get(item.id))}
+                highUsage={highUsageIds.has(item.id)}
                 onQuitar={onQuitar}
                 onAgregar={onAgregar}
                 onEditar={onEditar}
                 onHistorial={onHistorial}
+                onLotes={onLotes}
               />
             ))}
           </div>
@@ -199,10 +242,13 @@ export default function InventoryGrid({
                 <ItemCard
                   key={item.id}
                   item={item}
+                  semaphore={getStockSemaphore(item, predictions?.get(item.id))}
+                  highUsage={highUsageIds.has(item.id)}
                   onQuitar={onQuitar}
                   onAgregar={onAgregar}
                   onEditar={onEditar}
                   onHistorial={onHistorial}
+                  onLotes={onLotes}
                 />
               ))}
             </div>

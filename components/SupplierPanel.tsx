@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
+import { Unit } from "@/lib/types";
 
 interface ReceivingRow {
   id: string;
   created_at: string;
   quantity: number;
   lote: string | null;
-  items: { name: string; unit: string } | null;
+  items: { name: string; unit: Unit } | null;
 }
 
 export default function SupplierPanel() {
@@ -79,7 +80,7 @@ export default function SupplierPanel() {
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <p className="font-medium text-neutral-900">
-                    {r.quantity} {r.items ? UNIT_LABELS[r.items.unit] : ""}
+                    {r.items ? formatQuantity(r.quantity, r.items.unit) : r.quantity}
                   </p>
                   <p className="text-xs text-neutral-400">
                     {new Date(r.created_at).toLocaleDateString("es-MX")}

@@ -1,9 +1,12 @@
+import { Unit } from "./types";
+import { formatQuantity } from "./formatQuantity";
+
 interface ExpiryRow {
   name: string;
   lote: string | null;
   caducidad: string;
   quantity: number;
-  unit: string;
+  unit: Unit;
 }
 
 export function exportExpiryReport(rows: ExpiryRow[]) {
@@ -19,9 +22,10 @@ export function exportExpiryReport(rows: ExpiryRow[]) {
       <tr style="${days < 0 ? "color:#b91c1c;" : days <= 15 ? "color:#b45309;" : ""}">
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.name}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${r.lote ?? "—"}</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5; text-align:right;">${
-          r.quantity
-        } ${r.unit}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5; text-align:right;">${formatQuantity(
+          r.quantity,
+          r.unit
+        )}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #e5e5e5;">${new Date(
           r.caducidad
         ).toLocaleDateString("es-MX")}</td>

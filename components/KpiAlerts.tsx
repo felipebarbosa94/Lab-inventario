@@ -1,5 +1,5 @@
 import { Item } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 function describeItem(item: Item) {
   const parts = [item.name];
@@ -30,10 +30,10 @@ export default function KpiAlerts({ items }: { items: Item[] }) {
               Quedan pocas unidades de {describeItem(item)}
             </p>
             <p className="text-2xl font-bold text-red-700 mt-1">
-              {item.quantity} {UNIT_LABELS[item.unit]}
+              {formatQuantity(item.quantity, item.unit)}
             </p>
             <p className="text-xs text-red-500 mt-1">
-              Umbral de alerta: {item.low_stock_threshold} {UNIT_LABELS[item.unit]}
+              Umbral de alerta: {formatQuantity(item.low_stock_threshold ?? 0, item.unit)}
             </p>
           </div>
         ))}

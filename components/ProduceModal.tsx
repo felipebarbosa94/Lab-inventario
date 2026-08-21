@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Project, RecipeWithItems } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { ItemLot, Project, RecipeWithItems, Unit } from "@/lib/types";
 import { openProductionOrder } from "@/lib/productionOrder";
+import { allocateFefo, syncItemHeadlineLot } from "@/lib/lots";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
+import { roundQty } from "@/lib/units";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 export default function ProduceModal({
   recipe,
@@ -51,14 +54,26 @@ export default function ProduceModal({
     setChecked(new Set());
   }
 
+  // Si el mismo ingrediente aparece en más de una fila (dato viejo o error
+  // de captura), la falta de stock se evalúa contra la suma de todas las
+  // filas de ese ítem, no cada fila por separado — dos filas de 80 con solo
+  // 100 disponibles sí deben marcarse como falta, aunque cada una por sí
+  // sola "quepa".
+  const neededTotalsByItem = new Map<string, number>();
+  for (const ri of recipe.recipe_items) {
+    const needed = ri.quantity_per_batch * batchCount;
+    neededTotalsByItem.set(ri.item_id, (neededTotalsByItem.get(ri.item_id) ?? 0) + needed);
+  }
+
   const rows = recipe.recipe_items.map((ri) => {
     const needed = ri.quantity_per_batch * batchCount;
     const available = ri.items?.quantity ?? 0;
+    const combinedNeeded = neededTotalsByItem.get(ri.item_id) ?? needed;
     return {
       ...ri,
       needed,
       available,
-      short: needed > available,
+      short: combinedNeeded > available,
     };
   });
 
@@ -86,7 +101,7 @@ export default function ProduceModal({
       rows.map((r) => ({
         name: r.items?.name ?? "Ítem eliminado",
         needed: r.needed,
-        unit: r.items ? UNIT_LABELS[r.items.unit] : "",
+        unit: (r.items?.unit ?? "unidad") as Unit,
         short: r.short,
         available: r.available,
       })),
@@ -111,23 +126,78 @@ export default function ProduceModal({
       note.trim() ? " — " + note.trim() : ""
     }`;
 
-    const { error: insertError } = await supabase.from("movements").insert(
-      rows.map((r) => ({
-        item_id: r.item_id,
-        user_name: workerName,
-        type: "salida",
-        quantity: r.needed,
-        note: noteText,
-        lote: r.items?.lote ?? null,
-        caducidad: r.items?.caducidad ?? null,
-      }))
-    );
+    try {
+      const movementRows: {
+        item_id: string;
+        user_name: string;
+        type: "salida";
+        quantity: number;
+        note: string;
+        lot_id: string | null;
+        lote: string | null;
+        caducidad: string | null;
+        proveedor: string | null;
+      }[] = [];
+      const lotUpdates: { id: string; delta: number }[] = [];
 
-    setSaving(false);
-    if (insertError) {
-      setError(insertError.message);
+      // Se agrupa por ítem antes de descontar — si una receta repitiera el
+      // mismo ingrediente en dos filas (dato viejo o error de captura), esto
+      // evita que ambas filas lean el stock de lote "antes" de descontar y
+      // terminen tomando de más del mismo lote.
+      const neededByItem = new Map<string, number>();
+      for (const r of rows) {
+        neededByItem.set(r.item_id, (neededByItem.get(r.item_id) ?? 0) + r.needed);
+      }
+
+      // Cada ingrediente se descuenta de sus propios lotes por FEFO — así
+      // el registro queda con el lote y la fecha reales que se usaron, no
+      // el lote "vigente" del ítem que podía ya no ser el correcto.
+      for (const [itemId, totalNeeded] of neededByItem) {
+        const { data: lots, error: lotsError } = await supabase
+          .from("item_lots")
+          .select("*")
+          .eq("item_id", itemId)
+          .gt("quantity", 0);
+        if (lotsError) throw new Error(lotsError.message);
+        const allocation = allocateFefo((lots ?? []) as ItemLot[], totalNeeded);
+        for (const a of allocation) {
+          movementRows.push({
+            item_id: itemId,
+            user_name: workerName,
+            type: "salida",
+            quantity: a.take,
+            note: noteText,
+            lot_id: a.lot.id || null,
+            lote: a.lot.lote,
+            caducidad: a.lot.caducidad,
+            proveedor: a.lot.proveedor,
+          });
+          lotUpdates.push({ id: a.lot.id, delta: -roundQty(a.take) });
+        }
+      }
+
+      if (movementRows.length > 0) {
+        const { error: insertError } = await supabase.from("movements").insert(movementRows);
+        if (insertError) throw new Error(insertError.message);
+      }
+
+      await Promise.all(
+        lotUpdates.map((u) =>
+          supabase.rpc("adjust_lot_quantity", { p_lot_id: u.id, p_delta: u.delta })
+        )
+      );
+      await Promise.all(
+        Array.from(new Set(rows.map((r) => r.item_id))).map((id) =>
+          syncItemHeadlineLot(supabase, id)
+        )
+      );
+    } catch (err) {
+      setSaving(false);
+      setError(err instanceof Error ? err.message : "Error al descontar el inventario");
       return;
     }
+
+    setSaving(false);
     onClose();
   }
 
@@ -150,11 +220,10 @@ export default function ProduceModal({
               ¿Cuántos lotes de {recipe.batch_label}?
             </label>
             <input
-              type="number"
-              min="0"
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={batches}
-              onChange={(e) => handleBatchesChange(e.target.value)}
+              onChange={(e) => handleBatchesChange(sanitizeDecimalInput(e.target.value))}
               className="w-full rounded-md border border-neutral-300 px-3 py-2 text-lg"
               autoFocus
             />
@@ -165,11 +234,10 @@ export default function ProduceModal({
                 O cuánto total ({batchUnitLabel || "unidades"})
               </label>
               <input
-                type="number"
-                min="0"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 value={total}
-                onChange={(e) => handleTotalChange(e.target.value)}
+                onChange={(e) => handleTotalChange(sanitizeDecimalInput(e.target.value))}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2 text-lg"
               />
             </div>
@@ -217,10 +285,10 @@ export default function ProduceModal({
                     </span>
                   </span>
                   <span className="font-medium shrink-0 ml-2">
-                    {r.needed.toLocaleString("es-MX")} {r.items ? UNIT_LABELS[r.items.unit] : ""}
+                    {r.items ? formatQuantity(r.needed, r.items.unit) : r.needed}
                     {r.short && (
                       <span className="ml-2 text-xs">
-                        (solo hay {r.available.toLocaleString("es-MX")})
+                        (solo hay {r.items ? formatQuantity(r.available, r.items.unit) : r.available})
                       </span>
                     )}
                   </span>

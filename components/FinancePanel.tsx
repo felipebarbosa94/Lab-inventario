@@ -5,6 +5,7 @@ import MiniBarChart from "./MiniBarChart";
 import SupplierPanel from "./SupplierPanel";
 import PriceTrendChart from "./PriceTrendChart";
 import { exportFinanceReport } from "@/lib/financeReport";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
 
 interface RecipeSummary {
   id: string;
@@ -355,9 +356,10 @@ export default function FinancePanel({ onClose }: { onClose: () => void }) {
                   className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
                 />
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={newExpenseAmount}
-                  onChange={(e) => setNewExpenseAmount(e.target.value)}
+                  onChange={(e) => setNewExpenseAmount(sanitizeDecimalInput(e.target.value))}
                   placeholder="$ mensual"
                   className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm"
                 />
@@ -478,9 +480,10 @@ function RecipePriceRow({
       <div className="flex items-center gap-2 mt-2">
         <span className="text-sm text-neutral-500">Precio de venta:</span>
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
+          onChange={(e) => setPrice(sanitizeDecimalInput(e.target.value))}
           className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm"
           placeholder="0"
         />
@@ -559,9 +562,10 @@ function ItemCostRow({
       <div className="flex items-center gap-2 text-sm">
         <span className="flex-1 text-neutral-700">{item.name}</span>
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={cost}
-          onChange={(e) => setCost(e.target.value)}
+          onChange={(e) => setCost(sanitizeDecimalInput(e.target.value))}
           className="w-24 rounded-md border border-neutral-300 px-2 py-1"
           placeholder="0"
         />

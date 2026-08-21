@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { MovementWithItem } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 export default function TodayPanel({
   workerName,
@@ -71,7 +71,7 @@ export default function TodayPanel({
                     >
                       {m.type === "entrada" ? "agregó" : m.type === "salida" ? "quitó" : "ajustó"}
                     </span>{" "}
-                    {m.quantity} {m.items ? UNIT_LABELS[m.items.unit] : ""} de{" "}
+                    {m.items ? formatQuantity(m.quantity, m.items.unit) : m.quantity} de{" "}
                     <span className="font-medium">{m.items?.name ?? "ítem eliminado"}</span>
                   </p>
                   <span className="text-neutral-400 text-xs shrink-0">

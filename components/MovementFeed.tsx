@@ -1,5 +1,5 @@
 import { MovementWithItem } from "@/lib/types";
-import { UNIT_LABELS } from "@/lib/categories";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 function timeAgo(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -39,7 +39,7 @@ export default function MovementFeed({ movements }: { movements: MovementWithIte
               >
                 {m.type === "entrada" ? "agregó" : m.type === "salida" ? "quitó" : "ajustó"}
               </span>{" "}
-              {m.quantity} {m.items ? UNIT_LABELS[m.items.unit] : ""} de{" "}
+              {m.items ? formatQuantity(m.quantity, m.items.unit) : m.quantity} de{" "}
               <span className="font-medium">{m.items?.name ?? "ítem eliminado"}</span>
               {m.items?.project ? ` (${m.items.project}${m.items.flavor ? `, ${m.items.flavor}` : ""})` : ""}
             </p>

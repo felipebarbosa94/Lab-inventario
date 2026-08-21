@@ -24,9 +24,21 @@ export interface Movement {
   type: MovementType;
   quantity: number;
   note: string | null;
+  lot_id: string | null;
   lote: string | null;
   caducidad: string | null;
   proveedor: string | null;
+  created_at: string;
+}
+
+export interface ItemLot {
+  id: string;
+  item_id: string;
+  lote: string | null;
+  caducidad: string | null;
+  proveedor: string | null;
+  quantity: number;
+  received_at: string;
   created_at: string;
 }
 

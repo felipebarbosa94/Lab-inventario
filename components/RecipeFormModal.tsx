@@ -7,6 +7,8 @@ import { UNIT_LABELS } from "@/lib/categories";
 import { PRODUCT_TYPES, PRODUCT_TYPE_OPTIONS, BATCH_UNIT_LABELS, unitsForType } from "@/lib/productTypes";
 import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
 import { convertQuantity, entryUnitOptions, EntryUnit } from "@/lib/units";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
+import { formatQuantity } from "@/lib/formatQuantity";
 
 interface Row {
   item_id: string;
@@ -82,6 +84,17 @@ export default function RecipeFormModal({
     if (validRows.length === 0) {
       setError("Agregá al menos un ingrediente con cantidad");
       return;
+    }
+    const seenItemIds = new Set<string>();
+    for (const r of validRows) {
+      if (seenItemIds.has(r.item_id)) {
+        const dupItem = items.find((it) => it.id === r.item_id);
+        setError(
+          `"${dupItem?.name ?? "un ingrediente"}" está repetido en la lista — juntá la cantidad en una sola fila en vez de dos.`
+        );
+        return;
+      }
+      seenItemIds.add(r.item_id);
     }
     setSaving(true);
     setError(null);
@@ -237,11 +250,10 @@ export default function RecipeFormModal({
             </label>
             <div className="flex gap-2">
               <input
-                type="number"
-                min="0"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 value={batchQuantity}
-                onChange={(e) => setBatchQuantity(e.target.value)}
+                onChange={(e) => setBatchQuantity(sanitizeDecimalInput(e.target.value))}
                 className="flex-1 rounded-md border border-neutral-300 px-3 py-2"
               />
               <select
@@ -292,11 +304,12 @@ export default function RecipeFormModal({
                         ))}
                       </select>
                       <input
-                        type="number"
-                        min="0"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
                         value={row.quantity_per_batch}
-                        onChange={(e) => updateRow(i, { quantity_per_batch: e.target.value })}
+                        onChange={(e) =>
+                          updateRow(i, { quantity_per_batch: sanitizeDecimalInput(e.target.value) })
+                        }
                         className="w-20 rounded-md border border-neutral-300 px-2 py-2 text-sm"
                         placeholder="0"
                       />
@@ -327,8 +340,7 @@ export default function RecipeFormModal({
                     </div>
                     {selected && entryUnit && entryUnit !== selected.unit && rawQty > 0 && (
                       <p className="text-xs text-neutral-400 mt-0.5 ml-1">
-                        = {convertedQty.toLocaleString("es-MX", { maximumFractionDigits: 6 })}{" "}
-                        {UNIT_LABELS[selected.unit]} por lote
+                        = {formatQuantity(convertedQty, selected.unit)} por lote
                       </p>
                     )}
                   </div>

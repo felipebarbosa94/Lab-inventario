@@ -5,14 +5,20 @@ import { CATEGORY_LABELS, CATEGORY_OPTIONS, UNIT_LABELS } from "@/lib/categories
 import { supabase } from "@/lib/supabase";
 import { Item, Unit } from "@/lib/types";
 import { useProjectSuggestions } from "@/lib/useProjectSuggestions";
-import { convertQuantity } from "@/lib/units";
+import { convertQuantity, roundQty } from "@/lib/units";
+import { getOrCreateDefaultLot, syncItemHeadlineLot } from "@/lib/lots";
+import { sanitizeDecimalInput } from "@/lib/parseDecimal";
 
 export default function EditItemModal({
   item,
   onClose,
+  onOpenReceive,
+  onOpenLotes,
 }: {
   item: Item;
   onClose: () => void;
+  onOpenReceive?: () => void;
+  onOpenLotes?: () => void;
 }) {
   const [name, setName] = useState(item.name);
   const [category, setCategory] = useState(item.category);
@@ -24,9 +30,6 @@ export default function EditItemModal({
   const [threshold, setThreshold] = useState(
     item.low_stock_threshold !== null ? String(item.low_stock_threshold) : ""
   );
-  const [lote, setLote] = useState(item.lote ?? "");
-  const [caducidad, setCaducidad] = useState(item.caducidad ?? "");
-  const [proveedor, setProveedor] = useState(item.proveedor ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +48,9 @@ export default function EditItemModal({
     }
     setSaving(true);
     setError(null);
+
+    const finalQuantity = Number(quantity) || 0;
+
     const { error: updateError } = await supabase
       .from("items")
       .update({
@@ -53,18 +59,53 @@ export default function EditItemModal({
         project: project.trim() || null,
         flavor: flavor.trim() || null,
         unit,
-        quantity: Number(quantity) || 0,
+        quantity: finalQuantity,
         low_stock_threshold: threshold ? Number(threshold) : null,
-        lote: lote.trim() || null,
-        caducidad: caducidad || null,
-        proveedor: proveedor.trim() || null,
       })
       .eq("id", item.id);
-    setSaving(false);
     if (updateError) {
+      setSaving(false);
       setError(updateError.message);
       return;
     }
+
+    // Si cambió la unidad, los lotes existentes se recalculan a la nueva
+    // unidad para que sigan representando la misma cantidad física.
+    if (unit !== item.unit) {
+      const { data: lots } = await supabase
+        .from("item_lots")
+        .select("id, quantity")
+        .eq("item_id", item.id);
+      await Promise.all(
+        (lots ?? []).map((l) =>
+          supabase
+            .from("item_lots")
+            .update({ quantity: roundQty(convertQuantity(l.quantity, item.unit, unit)) })
+            .eq("id", l.id)
+        )
+      );
+    }
+
+    // Si la cantidad final no coincide con la suma de lotes (corrección
+    // manual de stock), la diferencia se guarda en el lote "sin datos" del
+    // ítem — así ningún gramo se pierde ni queda sin explicación.
+    const { data: refreshedLots } = await supabase
+      .from("item_lots")
+      .select("quantity")
+      .eq("item_id", item.id);
+    const lotsTotal = (refreshedLots ?? []).reduce((sum, l) => sum + l.quantity, 0);
+    const delta = Number((finalQuantity - lotsTotal).toFixed(6));
+    if (Math.abs(delta) > 1e-9) {
+      const defaultLot = await getOrCreateDefaultLot(supabase, item.id);
+      await supabase
+        .from("item_lots")
+        .update({ quantity: roundQty(Math.max(0, defaultLot.quantity + delta)) })
+        .eq("id", defaultLot.id);
+    }
+
+    await syncItemHeadlineLot(supabase, item.id);
+
+    setSaving(false);
     onClose();
   }
 
@@ -159,10 +200,10 @@ export default function EditItemModal({
                 Corregir cantidad
               </label>
               <input
-                type="number"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
               />
               <p className="text-xs text-neutral-400 mt-1">en {UNIT_LABELS[unit]}</p>
@@ -172,57 +213,45 @@ export default function EditItemModal({
                 Alerta si ≤
               </label>
               <input
-                type="number"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
+                onChange={(e) => setThreshold(sanitizeDecimalInput(e.target.value))}
                 className="w-full rounded-md border border-neutral-300 px-3 py-2"
                 placeholder="opcional"
               />
             </div>
           </div>
           {category === "materia_prima" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Número de lote
-                </label>
-                <input
-                  type="text"
-                  value={lote}
-                  onChange={(e) => setLote(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                  placeholder="opcional"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Caducidad
-                </label>
-                <input
-                  type="date"
-                  value={caducidad}
-                  onChange={(e) => setCaducidad(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Proveedor
-                </label>
-                <input
-                  type="text"
-                  value={proveedor}
-                  onChange={(e) => setProveedor(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2"
-                  placeholder="opcional"
-                />
+            <div className="bg-neutral-50 rounded-md p-2 space-y-2">
+              <p className="text-xs text-neutral-500">
+                Los lotes, fechas de caducidad y proveedor se manejan por separado, para que un
+                ítem pueda tener varios lotes a la vez sin que uno borre al otro.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenReceive}
+                  disabled={!onOpenReceive}
+                  className="flex-1 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-700 disabled:opacity-40"
+                >
+                  + Agregar lote nuevo
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenLotes}
+                  disabled={!onOpenLotes}
+                  className="flex-1 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-700 disabled:opacity-40"
+                >
+                  Ver lotes que ya tiene
+                </button>
               </div>
             </div>
           )}
           <p className="text-xs text-neutral-400">
-            Corregir la cantidad aquí no queda registrado en el historial de movimientos — es un
-            ajuste directo, no un uso.
+            Este número sí queda guardado y sí se descuenta normalmente cuando lo uses (Quitar,
+            producción de recetas, etc). Lo único distinto es que, al ser una corrección puntual
+            de conteo, no aparece como una línea en el historial de movimientos.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
